@@ -171,8 +171,8 @@ if (window.ZH_BOUNDARY){
   const world = [[-85, -180], [85, -180], [85, 180], [-85, 180]];
   L.polygon([world, ...rings], {pane:'mask', stroke:false, fillColor:'#05070f', fillOpacity:.8, interactive:false}).addTo(map);
   rings.forEach(r => {
-    L.polyline(r, {pane:'mask', color:'#ff3d8b', weight:7, opacity:.25, interactive:false}).addTo(map);
-    L.polyline(r, {pane:'mask', color:'#ffb3d1', weight:1.6, opacity:.9, interactive:false}).addTo(map);
+    L.polyline(r, {pane:'mask', color:'#c0283f', weight:8, opacity:.35, interactive:false}).addTo(map);
+    L.polyline(r, {pane:'mask', color:'#ff5a72', weight:1.6, opacity:.9, interactive:false}).addTo(map);
   });
 }
 
