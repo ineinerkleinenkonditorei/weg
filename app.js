@@ -311,7 +311,7 @@ $('#btnAdd').addEventListener('click', () => sheetCategory());
 
 function sheetCategory(){
   let h = `<div class="h grad">New Objective</div><div class="sub">Choose a category</div><div class="catgrid">`;
-  for (const k in CATS) h += `<button class="cat" data-k="${k}" style="--c:${CATS[k].color}"><span class="ic">${CATS[k].icon}</span><span><b>${CATS[k].name}</b><small>${CATS[k].hint}</small></span></button>`;
+  for (const k in CATS) h += `<button class="cat" data-k="${k}" style="--c:${CATS[k].color}"><span class="ic">${CATS[k].icon}</span><b>${CATS[k].name}</b></button>`;
   h += `</div>`;
   openSheet(h, b => b.querySelectorAll('.cat').forEach(btn => btn.onclick = () => {
     draft = {id:uid(), cat:btn.dataset.k, title:'', desc:'', steps:[], multi:false, created:Date.now(), cur:0, status:'active'};
