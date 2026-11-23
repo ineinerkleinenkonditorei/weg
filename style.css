@@ -358,3 +358,21 @@ i.star{font-style:normal;color:#ffd400;text-shadow:0 0 8px rgba(255,212,0,.7)}
 .glow-tiles,.glow-wide{transition:opacity .3s ease-out}
 body.zooming .glow-tiles,body.zooming .glow-wide{opacity:0!important;transition:none}
 body.zooming #vignette{-webkit-backdrop-filter:none;backdrop-filter:none}
+
+/* icons shrink when zooming out (headquarter excluded); far out they become small dots in their colour */
+#map .blip,#map .place:not(.hq){transition:transform .25s ease}
+#map[data-z="13"] .blip,#map[data-z="13"] .place:not(.hq){transform:scale(.8)}
+#map[data-z="12"] .blip,#map[data-z="12"] .place:not(.hq){transform:scale(.6)}
+#map[data-z="11"] .blip,#map[data-z="10"] .blip,#map[data-z="9"] .blip{transform:scale(.36)}
+#map[data-z="11"] .place:not(.hq),#map[data-z="10"] .place:not(.hq),#map[data-z="9"] .place:not(.hq){transform:scale(.32);background:var(--c)}
+/* dot mode: only the colour remains */
+#map[data-z="11"] .blip > *,#map[data-z="10"] .blip > *,#map[data-z="9"] .blip > *,
+#map[data-z="11"] .place:not(.hq) > *,#map[data-z="10"] .place:not(.hq) > *,#map[data-z="9"] .place:not(.hq) > *{visibility:hidden}
+
+/* glow follows zoom: full when close, softer further out (dense areas would otherwise turn into white haze) */
+#map[data-z="13"] .glow-wide{filter:grayscale(1) brightness(1.45) contrast(6) blur(9px) brightness(2.2)}
+#map[data-z="13"] .glow-tiles{filter:grayscale(1) brightness(1.45) contrast(6) blur(2.5px) brightness(1.9)}
+#map[data-z="12"] .glow-wide{filter:grayscale(1) brightness(1.45) contrast(6) blur(7px) brightness(1.3)}
+#map[data-z="12"] .glow-tiles{filter:grayscale(1) brightness(1.45) contrast(6) blur(2px) brightness(1.5)}
+#map[data-z="11"] .glow-wide,#map[data-z="10"] .glow-wide,#map[data-z="9"] .glow-wide{display:none}
+#map[data-z="11"] .glow-tiles,#map[data-z="10"] .glow-tiles,#map[data-z="9"] .glow-tiles{filter:grayscale(1) brightness(1.45) contrast(6) blur(2px) brightness(1.1)}

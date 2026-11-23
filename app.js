@@ -172,6 +172,10 @@ function applyLayer(){
 }
 applyLayer();
 
+/* ---- icon size follows zoom (CSS reads #map[data-z]); HQ is excluded in the CSS ---- */
+const setZoomAttr = () => { $('#map').dataset.z = Math.round(map.getZoom()); };
+map.on('zoomend', setZoomAttr); setZoomAttr();
+
 /* ---- performance: no glow / vignette blur during zoom animations (pinch or programmatic) ---- */
 {
   let t;
