@@ -33,9 +33,12 @@ svg{fill:currentColor}
 .leaflet-container{background:#000;font-family:var(--font)}
 /* stylised "atlas" look */
 /* dark map, streets pushed to white */
-body[data-layer=atlas] .base-tiles{filter:grayscale(1) brightness(1.5) contrast(4.8)}
-/* glow: blurred copy of the streets, screen-blended on top */
-.glow-tiles{filter:grayscale(1) brightness(1.5) contrast(4.8) blur(4px);mix-blend-mode:screen;opacity:.85;pointer-events:none}
+/* crisp streets ON TOP of the glow: "lighten" keeps the brighter of street vs. glow, so lines stay sharp */
+body[data-layer=atlas] .base-tiles{filter:grayscale(1) brightness(1.5) contrast(4.8);mix-blend-mode:lighten}
+/* neon glow BEHIND the streets: a tight bright halo + a wide soft halo */
+/* brightness 1.45 × contrast 6 → land goes to pure black, only streets feed the glow */
+.glow-tiles{filter:grayscale(1) brightness(1.45) contrast(6) blur(2px);mix-blend-mode:screen;opacity:1;pointer-events:none}
+.glow-wide{filter:grayscale(1) brightness(1.45) contrast(6) blur(7px);mix-blend-mode:screen;opacity:1;pointer-events:none}
 /* satellite under a heavy dark overlay so it reads as a map, not a photo */
 body[data-layer=sat] .base-tiles{filter:grayscale(.7) brightness(.38) contrast(1.25)}
 .leaflet-control-attribution{font-size:9px;background:rgba(0,0,0,.45)!important;color:#bbb}
