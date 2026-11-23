@@ -29,8 +29,8 @@ input,textarea{font:inherit;color:var(--text)}
 svg{fill:currentColor}
 [hidden]{display:none!important}
 
-#map{position:fixed;inset:0;background:#000}
-.leaflet-container{background:#000;font-family:var(--font)}
+#map{position:fixed;inset:0;background:#1e1e1e}   /* same grey as the land: unloaded tiles don't show as black holes */
+.leaflet-container{background:#1e1e1e;font-family:var(--font)}
 /* stylised "atlas" look */
 /* dark map, streets pushed to white */
 /* crisp streets ON TOP of the glow: "lighten" keeps the brighter of street vs. glow, so lines stay sharp */

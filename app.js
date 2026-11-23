@@ -148,12 +148,17 @@ const ESRI = 'https://server.arcgisonline.com/ArcGIS/rest/services/';
 // sharp on iPhone: on high-density screens load one zoom level deeper at half size (detectRetina).
 // maxNativeZoom = deepest level the source has, minus 1 on retina because of that offset.
 const RETINA = L.Browser.retina;
-const sharp = (deepest, extra) => ({detectRetina:true, maxZoom:20, maxNativeZoom:RETINA ? deepest - 1 : deepest, ...extra});
+// loading behaviour for every map layer: fetch while swiping (phones default to "only when idle"),
+// and keep a wide ring of extra tiles around the screen ready
+const LOAD = {updateWhenIdle:false, updateWhenZooming:false, keepBuffer:4};
+const sharp = (deepest, extra) => ({detectRetina:true, maxZoom:20, maxNativeZoom:RETINA ? deepest - 1 : deepest, ...LOAD, ...extra});
+// the glow is blurred anyway → normal resolution is enough (¼ of the downloads on retina)
+const soft = (deepest, extra) => ({maxZoom:20, maxNativeZoom:deepest, ...LOAD, ...extra});
 const LAYERS = {
   // neon look: wide soft halo (bottom) + tight halo (middle) + crisp streets on top (blended with "lighten")
   atlas:  {name:'Atlas', base:L.tileLayer(ESRI + 'Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', sharp(16, {className:'base-tiles', zIndex:3, attribution:'&copy; Esri, HERE, ' + OSM})),
-           glow:L.tileLayer(ESRI + 'Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', sharp(16, {className:'glow-tiles', zIndex:2})),
-           glowWide:L.tileLayer(ESRI + 'Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', sharp(16, {className:'glow-wide', zIndex:1})),
+           glow:L.tileLayer(ESRI + 'Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', soft(16, {className:'glow-tiles', zIndex:2})),
+           glowWide:L.tileLayer(ESRI + 'Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', soft(16, {className:'glow-wide', zIndex:1})),
            labels:L.tileLayer(ESRI + 'Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}', {maxZoom:14, pane:'labels'})},
   sat:    {name:'Satellite', base:L.tileLayer('https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.swissimage/default/current/3857/{z}/{x}/{y}.jpeg', sharp(19, {className:'base-tiles', attribution:'&copy; swisstopo'})),
            labels:L.tileLayer(ESRI + 'Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {maxZoom:19, pane:'labels'})},
