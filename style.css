@@ -60,7 +60,7 @@ body[data-layer=sat] .base-tiles{filter:grayscale(.7) brightness(.38) contrast(1
 /* ---------- Mode bar (right) ---------- */
 #modebar{position:fixed;right:0;top:50%;transform:translateY(-50%);z-index:500;display:flex;flex-direction:column;gap:6px;
   padding:10px 8px 10px 10px;background:var(--panel);border:1px solid var(--line);border-right:0;border-radius:18px 0 0 18px;backdrop-filter:blur(10px)}
-.mode{position:relative;width:44px;height:44px;border-radius:12px;display:grid;place-items:center;opacity:.55;transition:.15s}
+.mode{position:relative;width:44px;height:44px;border-radius:12px;display:grid;place-items:center;transition:.15s}
 .mode .ic{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;background:var(--c);color:#111;box-shadow:0 0 0 2px rgba(0,0,0,.6)}
 .mode .ic svg{width:18px;height:18px}
 .mode.all .ic{background:conic-gradient(#f5c518,#2ecc71,#3aa0ff,#ff5fa2,#ff4d4d,#b77dff,#ff9f43,#f5c518)}
@@ -291,24 +291,6 @@ i.star{font-style:normal;color:#ffd400;text-shadow:0 0 8px rgba(255,212,0,.7)}
 .star-stat b{color:#ffd400!important;text-shadow:0 0 10px rgba(255,212,0,.5)}
 .star-btn.on{color:#ffd400;border-color:#ffd400;box-shadow:0 0 14px rgba(255,212,0,.35)}
 
-/* ================= start-up animation ================= */
-.intro-fx{position:fixed;top:-20%;bottom:-20%;left:0;width:300%;transform:translateX(-66.667%);will-change:transform;pointer-events:none}
-/* red multiply layer: white streets turn red, black stays black; the white part leaves the map untouched */
-.intro-fx.tint{z-index:450;background:linear-gradient(105deg,#fff 0 30.5%,#ff9aa5 32%,#ff1f3a 33.6% 100%);mix-blend-mode:multiply}
-/* bright light streak riding the edge of the wipe */
-.intro-fx.streak{z-index:451;background:linear-gradient(105deg,transparent 30.8%,rgba(255,60,80,.35) 31.8%,rgba(255,190,200,1) 32.6%,rgba(255,60,80,.35) 33.4%,transparent 34.4%);mix-blend-mode:screen;filter:blur(3px)}
-/* black curtain with a glowing red leading edge – reveals the red streets */
-.intro-fx.cover{z-index:452;pointer-events:auto;background:linear-gradient(105deg,transparent 0 30.6%,rgba(255,40,60,.85) 32.3%,rgba(60,0,8,1) 33.4%,#000 34.2% 100%)}
-body.intro-go .intro-fx.cover{animation:introSweep 1.3s cubic-bezier(.55,.05,.35,1) forwards}
-body.intro-go .intro-fx.tint,body.intro-go .intro-fx.streak{animation:introSweep 1.15s cubic-bezier(.6,.02,.3,1) 2s forwards}
-body.intro-go #map{animation:introPulse .7s ease-in-out 1.3s 1}
-@keyframes introSweep{to{transform:translateX(34%)}}
-@keyframes introPulse{40%{filter:brightness(1.35)}}
-/* while the intro runs: extra-strong glow, hide icons and HUD */
-body.intro .glow-tiles{opacity:1!important;filter:grayscale(1) brightness(1.6) contrast(5) blur(5px)!important}
-#hud,#modebar,#bottomBar,#modeTitle,#fx,.leaflet-marker-pane{transition:opacity .9s ease}
-body.intro #hud,body.intro #modebar,body.intro #bottomBar,body.intro #modeTitle,body.intro #fx,body.intro .leaflet-marker-pane{opacity:0}
-
 /* ================= sci-fi corner vignette (bottom-left) ================= */
 #fx{position:fixed;inset:0;z-index:420;pointer-events:none;overflow:hidden}
 .fx-dark{position:absolute;left:-35vmax;bottom:-35vmax;width:100vmax;height:100vmax;background:radial-gradient(circle,rgba(0,0,0,.8) 0%,rgba(0,0,0,.45) 30%,transparent 62%)}
@@ -337,7 +319,7 @@ body.intro #hud,body.intro #modebar,body.intro #bottomBar,body.intro #modeTitle,
   -webkit-mask-image:radial-gradient(circle at 0 100%,#000 0,transparent 55vmax);mask-image:radial-gradient(circle at 0 100%,#000 0,transparent 55vmax);
   animation:fxFlick 5s steps(1) infinite}
 @keyframes fxFlick{0%,100%{opacity:1}47%{opacity:.75}49%{opacity:1}83%{opacity:.85}}
-@media (prefers-reduced-motion:reduce){#fx *{animation:none!important}.intro-fx{display:none}}
+@media (prefers-reduced-motion:reduce){#fx *{animation:none!important}#flash{display:none}}
 /* two corners: the top-right one is the same layer turned 180°, with its motion offset in time */
 .fx-corner{position:absolute;inset:0}
 .fx-corner.tr{transform:rotate(180deg)}
@@ -347,3 +329,15 @@ body.intro #hud,body.intro #modebar,body.intro #bottomBar,body.intro #modeTitle,
 .fx-corner.tr .r1{animation-delay:-14s}
 .fx-corner.tr .r2{animation-delay:-30s}
 .fx-corner.tr .fx-scan{animation-delay:-2.3s}
+
+/* corner groups, each scaled toward its own corner (bottom-left in local coords; the TR corner is rotated 180°) */
+.fx-grp{position:absolute;inset:0;transform-origin:0 100%}
+.fx-corner.bl .fx-grp.glow{transform:scale(.5)}
+.fx-corner.bl .fx-grp.rings{transform:scale(.3)}
+.fx-corner.tr .fx-grp{transform:scale(.15)}
+
+/* start-up: one smooth red glow flash */
+#flash{position:fixed;inset:0;z-index:600;pointer-events:none;opacity:0;
+  background:radial-gradient(ellipse at 50% 45%,rgba(255,45,70,.55) 0%,rgba(160,18,40,.45) 35%,rgba(70,0,12,.35) 70%,rgba(0,0,0,.2) 100%);
+  animation:flashGlow 1.5s cubic-bezier(.3,0,.2,1) .1s 1 forwards}
+@keyframes flashGlow{0%{opacity:0}22%{opacity:1}100%{opacity:0}}

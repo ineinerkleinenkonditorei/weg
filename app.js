@@ -165,22 +165,8 @@ function applyLayer(){
 }
 applyLayer();
 
-/* ---- start-up animation: red street reveal, then swipe back to the normal map ---- */
-(function playIntro(){
-  const els = [...document.querySelectorAll('.intro-fx')];
-  const finish = () => { document.body.classList.remove('intro', 'intro-go'); els.forEach(e => e.remove()); };
-  if (!els.length || matchMedia('(prefers-reduced-motion: reduce)').matches) return finish();
-  let started = false;
-  const start = () => {
-    if (started) return; started = true;
-    document.body.classList.add('intro-go');
-    setTimeout(() => document.body.classList.remove('intro'), 2500);   // HUD fades in during the wipe
-    setTimeout(finish, 3400);
-  };
-  LAYERS[layerKey].base.once('load', () => setTimeout(start, 120));  // wait until the streets are there
-  setTimeout(start, 2500);                                           // …but never longer than this
-  document.querySelector('.intro-fx.cover').addEventListener('click', finish);   // tap to skip
-})();
+/* ---- start-up: a red glow flash (pure CSS); remove the layer once it has played ---- */
+setTimeout(() => $('#flash')?.remove(), 2000);
 
 // Canton "island": darken everything outside Kanton Zürich + glowing border
 if (window.ZH_BOUNDARY){
