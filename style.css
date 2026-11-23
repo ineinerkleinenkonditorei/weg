@@ -263,3 +263,8 @@ label.f{display:block;font-size:11px;font-weight:800;letter-spacing:1.5px;text-t
 .catgrid{display:flex!important;flex-wrap:wrap;gap:8px}
 .catgrid .cat{border-radius:14px!important;width:auto;min-height:0;padding:6px 14px 6px 6px;gap:9px}
 .catgrid .cat .ic{width:34px;height:34px}
+/* wine red glowing border, see-through inside */
+.catgrid .cat{background:transparent!important;border:1.5px solid #c0283f;box-shadow:0 0 10px rgba(192,40,63,.5),inset 0 0 6px rgba(192,40,63,.25)}
+.catgrid .cat:active{box-shadow:0 0 16px rgba(192,40,63,.8)}
+.catgrid .cat b{color:#fff;text-shadow:1px 0 0 #c0283f,-1px 0 0 #c0283f,0 1px 0 #c0283f,0 -1px 0 #c0283f,0 0 10px rgba(192,40,63,.9),0 0 4px rgba(192,40,63,.7)}
+.catgrid .cat .ic{border:1.5px solid #c0283f;box-shadow:0 0 10px rgba(192,40,63,.5),inset 0 0 6px rgba(192,40,63,.25)}
