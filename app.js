@@ -478,9 +478,9 @@ function sheetDetails(){
     <div class="kicker" style="--c:${c.color}">${c.name}</div>
     <div class="h">Objective details</div>
     <label class="f">Title</label>
-    <input class="inp" id="dTitle" maxlength="80" placeholder="e.g. Get my driver's licence" value="${esc(draft.title)}">
+    <input class="inp" id="dTitle" maxlength="80" placeholder="..." value="${esc(draft.title)}">
     <label class="f">Description</label>
-    <textarea class="inp" id="dDesc" rows="3" placeholder="What's it about? Notes, details…">${esc(draft.desc)}</textarea>
+    <textarea class="inp" id="dDesc" rows="3" placeholder="...">${esc(draft.desc)}</textarea>
     <label class="toggle"><span><b>Multi-step objective</b><br><small style="color:var(--muted)">Next step appears when one is done</small></span><input type="checkbox" id="dMulti" ${draft.multi ? 'checked' : ''}></label>
     ${timeFields(draft)}
     <button class="btn primary block" id="dNext">Next · Set place</button>
