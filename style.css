@@ -109,6 +109,17 @@ body[data-layer=sat] .base-tiles{filter:grayscale(.7) brightness(.38) contrast(1
 .pick-opt.swatch{background:var(--c)}
 .list-item .place{flex:none;width:36px;height:36px}
 .list-item .place svg{width:20px;height:20px}
+/* custom PNG symbols inside the circles */
+.ic-img{display:block;width:22px;height:22px;max-width:none;object-fit:contain;pointer-events:none;-webkit-user-select:none;user-select:none}
+.blip .ic-img{width:23px;height:23px}
+.blip.big .ic-img{width:31px;height:31px}
+.mode .ic .ic-img{width:21px;height:21px}
+.cat .ic .ic-img{width:25px;height:25px}
+.place .ic-img{width:34px;height:34px;filter:drop-shadow(0 0 3px var(--c))}
+.place.hq .ic-img{width:46px;height:46px}
+.pchip .place .ic-img,.list-item .place .ic-img{width:26px;height:26px}
+.place.open .ic-img{filter:none}
+.pick-opt .ic-img{width:36px;height:36px}
 .me-dot{width:18px;height:18px;border-radius:50%;background:#fff;border:4px solid #2f80ff;box-shadow:0 0 0 6px rgba(47,128,255,.25)}
 
 /* ---------- Picker ---------- */

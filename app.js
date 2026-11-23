@@ -20,7 +20,9 @@ const CATS = {
   social:   {name:'Social',   hint:'Friends & family',      color:'#b77dff'},
   errand:   {name:'Errands',  hint:'Shopping, pickups',     color:'#ff9f43'},
 };
-for (const k in CATS) CATS[k].icon = ICONS[k];
+// custom PNG symbols (app/icons/<key>.png) replace the built-in drawings
+const ICON_IMG = k => `<img class="ic-img" src="icons/${k}.png" alt="" draggable="false">`;
+for (const k in CATS) CATS[k].icon = ICON_IMG(k);
 
 /* ---------------- Helpers ---------------- */
 const $ = s => document.querySelector(s);
@@ -78,7 +80,7 @@ const DB = {
 
 /* ---------------- Fixed places (headquarter, garage, gym …) ---------------- */
 const PLACE_ICONS = {
-  hq:     '<svg viewBox="0 0 24 24"><path d="M3 21V9.5L12 3l9 6.5V21h-6v-6H9v6zm8-12h2V7h-2z"/></svg>',
+  hq:     ICON_IMG('hq'),
   home:   '<svg viewBox="0 0 24 24"><path d="M12 3l9 8h-3v9h-5v-6h-2v6H6v-9H3z"/></svg>',
   garage: '<svg viewBox="0 0 24 24"><path d="M21 7.5a5 5 0 0 1-6.6 4.7L6.7 20a2 2 0 0 1-2.8-2.8l7.8-7.7A5 5 0 0 1 17.6 3l-3 3 .9 2.5 2.5.9z"/></svg>',
   gym:    '<svg viewBox="0 0 24 24"><path d="M1 10h2V8h2v8H3v-2H1zm22 0h-2V8h-2v8h2v-2h2zM6 6h3v12H6zm9 0h3v12h-3zm-6 5h6v2H9z"/></svg>',
