@@ -172,6 +172,13 @@ function applyLayer(){
 }
 applyLayer();
 
+/* ---- performance: no glow / vignette blur during zoom animations (pinch or programmatic) ---- */
+{
+  let t;
+  map.on('zoomstart', () => { clearTimeout(t); document.body.classList.add('zooming'); });
+  map.on('zoomend', () => { clearTimeout(t); t = setTimeout(() => document.body.classList.remove('zooming'), 120); });
+}
+
 /* ---- start-up: a red glow flash (pure CSS); remove the layer once it has played ---- */
 setTimeout(() => $('#flash')?.remove(), 2000);
 

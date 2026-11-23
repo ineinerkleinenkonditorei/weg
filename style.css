@@ -353,3 +353,8 @@ i.star{font-style:normal;color:#ffd400;text-shadow:0 0 8px rgba(255,212,0,.7)}
   background:radial-gradient(ellipse 72% 62% at 50% 50%,transparent 50%,rgba(0,0,0,.35) 80%,rgba(0,0,0,.7) 100%)}
 /* sidebar: unselected icons slightly dimmer than the selected one */
 .mode:not(.on){opacity:.78}
+
+/* performance: while zooming, drop the heavy glow + vignette blur; the glow fades back in afterwards */
+.glow-tiles,.glow-wide{transition:opacity .3s ease-out}
+body.zooming .glow-tiles,body.zooming .glow-wide{opacity:0!important;transition:none}
+body.zooming #vignette{-webkit-backdrop-filter:none;backdrop-filter:none}
