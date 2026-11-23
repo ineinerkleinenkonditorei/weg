@@ -1,5 +1,5 @@
 // App-shell cache so the app opens instantly / offline. Map tiles are cached as you browse.
-const V = 'zh-story-v11';
+const V = 'zh-story-v12';
 const SHELL = ['./', 'index.html', 'style.css', 'app.js', 'zh-boundary.js', 'manifest.json', 'icon-180.png', 'icon-192.png',
   'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css', 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'];
 
@@ -11,7 +11,7 @@ self.addEventListener('activate', e => {
 });
 self.addEventListener('fetch', e => {
   const u = new URL(e.request.url);
-  if (e.request.method !== 'GET' || u.hostname.includes('nominatim')) return;
+  if (e.request.method !== 'GET' || u.hostname.includes('nominatim') || u.hostname === 'api.github.com') return;
   const isTile = /arcgisonline\.com|tile\.openstreetmap\.org|wmts\.geo\.admin\.ch/.test(u.hostname);
   if (isTile){
     // cache-first for tiles, keep the cache bounded

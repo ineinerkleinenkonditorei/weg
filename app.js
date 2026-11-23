@@ -793,7 +793,7 @@ function sheetComplete(t){
   openSheet(`
     <div class="kicker" style="--c:${c.color}">${last ? 'Objective complete' : 'Step complete'}</div>
     <div class="h">${esc(s.title)}</div>
-    <div class="sub">Capture the moment for your story archive.</div>
+    <div class="sub">Capture the moment for your archive.</div>
     <button class="photo-prev" id="cPhoto">📷 Tap to take a photo</button>
     <label class="f">Note (optional)</label>
     <textarea class="inp" id="cNote" rows="2" placeholder="How did it go?"></textarea>
@@ -884,6 +884,56 @@ $('#btnList').onclick = () => {
 /* ---------------- Archive ---------------- */
 $('#btnArchive').onclick = () => { $('#archive').hidden = false; renderArchive(); };
 $('#archClose').onclick = () => { $('#archive').hidden = true; };
+$('#archAdd').onclick = () => sheetArchiveEntry();
+
+// manual archive entry: same "capture the moment" flow, without an objective
+function sheetArchiveEntry(){
+  let cat = null; pendingPhoto = null;
+  openSheet(`
+    <div class="kicker">Archive</div>
+    <div class="h">New entry</div>
+    <div class="sub">Capture the moment for your archive.</div>
+    <div class="catgrid">${Object.keys(CATS).map(k => `<button class="cat" data-k="${k}" style="--c:${CATS[k].color}"><span class="ic">${CATS[k].icon}</span><b>${CATS[k].name}</b></button>`).join('')}</div>
+    <label class="f">Title</label>
+    <input class="inp" id="eTitle" maxlength="80" placeholder="What happened?">
+    <button class="photo-prev" id="cPhoto">📷 Tap to take a photo</button>
+    <label class="f">Note (optional)</label>
+    <textarea class="inp" id="cNote" rows="2" placeholder="How did it go?"></textarea>
+    <button class="btn primary block" id="eSave" disabled>Save to archive</button>
+    <button class="btn ghost block" id="eBack">Cancel</button>`,
+  b => {
+    const title = b.querySelector('#eTitle'), save = b.querySelector('#eSave');
+    const upd = () => save.disabled = !cat || !title.value.trim();
+    title.oninput = upd;
+    b.querySelectorAll('.cat').forEach(x => x.onclick = () => {
+      cat = x.dataset.k;
+      b.querySelectorAll('.cat').forEach(y => y.classList.toggle('on', y === x));
+      upd();
+    });
+    const prev = b.querySelector('#cPhoto');
+    prev.onclick = () => { $('#photoInput').value = ''; $('#photoInput').click(); };
+    $('#photoInput').onchange = async e => {
+      const f = e.target.files[0]; if (!f) return;
+      prev.textContent = 'Processing…';
+      try {
+        pendingPhoto = await resizeImage(f, 1600);
+        prev.style.backgroundImage = `url(${URL.createObjectURL(pendingPhoto)})`;
+        prev.style.borderStyle = 'solid'; prev.textContent = '';
+      } catch { prev.textContent = 'Could not read photo — try again'; }
+    };
+    b.querySelector('#eBack').onclick = closeSheet;
+    save.onclick = async () => {
+      save.disabled = true;
+      const now = Date.now(), s = {id:uid(), title:title.value.trim(), doneAt:now, place:''};
+      const note = b.querySelector('#cNote').value.trim(); if (note) s.note = note;
+      if (pendingPhoto){ s.photoId = uid(); await DB.put('photos', pendingPhoto, s.photoId); }
+      if (meLatLng){ s.lat = meLatLng[0]; s.lng = meLatLng[1]; }
+      const t = {id:uid(), cat, title:s.title, desc:'', created:now, doneAt:now, status:'done', manual:true, cur:1, steps:[s]};
+      tasks.push(t); await saveTask(t);
+      closeSheet(); renderArchive(); toast('Added to your archive');
+    };
+  });
+}
 
 async function renderArchive(){
   const list = done().sort((a, b) => b.doneAt - a.doneAt);
@@ -919,16 +969,18 @@ async function renderArchiveDetail(id){
   const c = CATS[t.cat];
   const cover = await photoUrl(coverId(t));
   let h = `<div class="hero" style="${cover ? `background-image:url(${cover})` : ''}"><div class="cap" style="--c:${c.color}">
-      <div class="kicker">${c.name} · Objective passed</div><div class="h">${esc(t.title)}</div></div></div>
+      <div class="kicker">${c.name} · ${t.manual ? 'Entry' : 'Objective passed'}</div><div class="h">${esc(t.title)}</div></div></div>
     <div class="timeline">
-      <div class="meta" style="margin-top:-6px"><span class="chip">Started ${fmtDT(t.created)}</span><span class="chip">Passed ${fmtDT(t.doneAt)}</span><span class="chip">⏱ ${fmtDur(t.doneAt - t.created)}</span></div>
+      <div class="meta" style="margin-top:-6px">${t.manual
+        ? `<span class="chip">Entered ${fmtDT(t.doneAt)}</span>`
+        : `<span class="chip">Started ${fmtDT(t.created)}</span><span class="chip">Passed ${fmtDT(t.doneAt)}</span><span class="chip">⏱ ${fmtDur(t.doneAt - t.created)}</span>`}</div>
       ${t.desc ? `<div class="desc" style="margin-bottom:18px">${esc(t.desc)}</div>` : ''}`;
   for (const s of t.steps){
     const u = await photoUrl(s.photoId);
     h += `<div class="tl" style="--c:${c.color}">
       <div class="when">${fmtDT(s.doneAt)}</div>
       <b>${esc(s.title)}</b>
-      <small>📍 ${esc(s.place || '')}</small>
+      ${s.place ? `<small>📍 ${esc(s.place)}</small>` : ''}
       ${s.desc ? `<div class="desc" style="margin-top:4px;font-size:13px">${esc(s.desc)}</div>` : ''}
       ${s.note ? `<div class="note">“${esc(s.note)}”</div>` : ''}
       ${u ? `<img src="${u}" alt="">` : ''}
@@ -945,6 +997,151 @@ async function renderArchiveDetail(id){
   };
 }
 
+/* ---------------- Automatic cloud backup → private GitHub repo ----------------
+   data.json  = all objectives, archive entries and places
+   photos/*.jpg = every photo (uploaded once, kept forever – history is in git)
+   The access key stays on this phone only (localStorage), never in backups. */
+const b64utf8 = s => { const u = new TextEncoder().encode(s); let bin = ''; for (let i = 0; i < u.length; i += 0x8000) bin += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000)); return btoa(bin); };
+const Backup = {
+  timer:null, busy:false, state:'',
+  cfg(){ return store.get('bk-cfg', null); },
+  async api(path, opts = {}){
+    const c = this.cfg();
+    return fetch(`https://api.github.com/repos/${c.repo}${path ? '/' + path : ''}`, {...opts, cache:'no-store', headers:{
+      Authorization:`Bearer ${c.token}`, Accept:'application/vnd.github+json', 'X-GitHub-Api-Version':'2022-11-28', ...(opts.headers || {})}});
+  },
+  async putFile(path, b64, msg){
+    const g = await this.api('contents/' + path);
+    if (!g.ok && g.status !== 404) throw new Error(`GitHub ${g.status}`);
+    const sha = g.ok ? (await g.json()).sha : undefined;
+    const r = await this.api('contents/' + path, {method:'PUT', body:JSON.stringify({message:msg, content:b64, ...(sha ? {sha} : {})})});
+    if (!r.ok) throw new Error(`GitHub ${r.status}`);
+  },
+  dirty(){
+    if (!this.cfg()) return;
+    store.set('bk-dirty', true);
+    clearTimeout(this.timer); this.timer = setTimeout(() => this.run(), 4000);
+  },
+  status(s, msg){ this.state = s; if (msg !== undefined) store.set('bk-err', msg); const el = $('#bkStatus'); if (el) el.innerHTML = this.label(); },
+  label(){
+    if (!this.cfg()) return 'Not connected';
+    if (this.state === 'busy') return '⟳ Backing up…';
+    const last = store.get('bk-last', 0), err = store.get('bk-err', '');
+    if (this.state === 'err' || (err && store.get('bk-dirty', false))) return `<span style="color:#ff5a5a">⚠ Backup failed: ${esc(err)}</span>`;
+    return last ? `✓ Backed up ${fmtDT(last)}` : 'Waiting for first backup';
+  },
+  async run(force){
+    if (this.busy || !this.cfg()) return;
+    if (!force && !store.get('bk-dirty', false)) return;
+    if (!navigator.onLine){ this.status('err', 'offline – will retry'); return; }
+    this.busy = true; this.status('busy');
+    try {
+      store.set('bk-dirty', false);
+      const sent = new Set(store.get('bk-photos', []));
+      for (const k of await DB.allKeys('photos')){
+        if (sent.has(k)) continue;
+        const blob = await DB.get('photos', k); if (!blob) continue;
+        await this.putFile(`photos/${k}.jpg`, (await blobToDataURL(blob)).split(',')[1], 'photo');
+        sent.add(k); store.set('bk-photos', [...sent]);
+      }
+      const data = JSON.stringify({app:'zh-story', v:2, saved:Date.now(), tasks, places}, null, 1);
+      await this.putFile('data.json', b64utf8(data), `backup ${new Date().toISOString().slice(0, 16).replace('T', ' ')}`);
+      store.set('bk-last', Date.now()); store.set('bk-err', ''); this.status('ok');
+    } catch (e) {
+      store.set('bk-dirty', true);
+      const m = String(e.message || e);
+      this.status('err', /401|403/.test(m) ? 'access key invalid or expired' : /404/.test(m) ? 'repository not found' : m);
+      if (!/401|403|404/.test(m)){ clearTimeout(this.timer); this.timer = setTimeout(() => this.run(), 60000); }
+    } finally { this.busy = false; }
+  },
+  async restore(){
+    const r = await this.api('contents/data.json', {headers:{Accept:'application/vnd.github.raw+json'}});
+    if (!r.ok) throw new Error(r.status === 404 ? 'no backup found yet' : `GitHub ${r.status}`);
+    const d = await r.json();
+    const sent = new Set(store.get('bk-photos', [])), have = new Set(await DB.allKeys('photos'));
+    const ids = (d.tasks || []).flatMap(t => t.steps.map(s => s.photoId)).filter(Boolean);
+    let n = 0;
+    for (const id of ids){
+      if (have.has(id)) continue;
+      toast(`Restoring photos… ${++n}`);
+      const p = await this.api(`contents/photos/${id}.jpg`, {headers:{Accept:'application/vnd.github.raw+json'}});
+      if (p.ok){ await DB.put('photos', await p.blob(), id); sent.add(id); }
+    }
+    store.set('bk-photos', [...sent]);
+    for (const t of d.tasks || []) await DB.put('tasks', t);
+    for (const p of d.places || []) await DB.put('places', p);
+    tasks = await DB.all('tasks'); places = await DB.all('places');
+    places.sort((a, b) => (b.hq ? 1 : 0) - (a.hq ? 1 : 0));
+    return (d.tasks || []).length;
+  },
+};
+// every change to objectives, places or photos schedules a backup
+for (const fn of ['put', 'del']){
+  const orig = DB[fn].bind(DB);
+  DB[fn] = async (...a) => { const r = await orig(...a); Backup.dirty(); return r; };
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden) Backup.run(); });
+window.addEventListener('online', () => Backup.run());
+
+function sheetBackup(){
+  const c = Backup.cfg();
+  openSheet(c ? `
+    <div class="h grad">Cloud backup</div>
+    <div class="sub">Every change is copied automatically to your private GitHub repository <b>${esc(c.repo)}</b>.</div>
+    <div class="objective" style="--c:#c0283f"><div id="bkStatus">${Backup.label()}</div></div>
+    <button class="btn primary block" id="bkNow">Back up now</button>
+    <button class="btn block" id="bkRestore">Restore from backup</button>
+    <button class="btn ghost danger block" id="bkOff">Disconnect</button>
+    <button class="btn ghost block" id="bkBack">Back</button>` : `
+    <div class="h grad">Cloud backup</div>
+    <div class="sub">Connect a private GitHub repository once – after that everything backs up by itself.</div>
+    <label class="f">Repository</label>
+    <input class="inp" id="bkRepo" value="ineinerkleinenkonditorei/zh-story-backup" autocapitalize="off" autocorrect="off" spellcheck="false">
+    <label class="f">Access key (token)</label>
+    <input class="inp" id="bkToken" type="password" placeholder="github_pat_…" autocapitalize="off" autocorrect="off" spellcheck="false">
+    <button class="btn primary block" id="bkConnect">Connect</button>
+    <button class="btn ghost block" id="bkBack">Back</button>`,
+  b => {
+    b.querySelector('#bkBack').onclick = () => $('#btnMenu').click();
+    if (!c){
+      b.querySelector('#bkConnect').onclick = async e => {
+        const repo = b.querySelector('#bkRepo').value.trim().replace(/^https?:\/\/github\.com\//, '').replace(/\/$/, '');
+        const token = b.querySelector('#bkToken').value.trim();
+        if (!repo.includes('/') || !token) return toast('Fill in repository and access key');
+        e.target.disabled = true; e.target.textContent = 'Checking…';
+        store.set('bk-cfg', {repo, token});
+        try {
+          const r = await Backup.api('');
+          if (!r.ok) throw new Error(r.status === 404 ? 'Repository not found (check name and key access)' : r.status === 401 ? 'Access key not accepted' : `GitHub ${r.status}`);
+          const info = await r.json();
+          if (!info.private) toast('⚠ This repository is public – make it private on GitHub!');
+          const has = (await Backup.api('contents/data.json')).ok;
+          if (has && confirm('This repository already has a backup. Restore it onto this phone first?')){ const n = await Backup.restore(); render(); toast(`Restored ${n} entries`); }
+          store.set('bk-dirty', true); Backup.run(true);
+          sheetBackup();
+        } catch (err) {
+          store.set('bk-cfg', null);
+          toast(String(err.message || err)); e.target.disabled = false; e.target.textContent = 'Connect';
+        }
+      };
+      return;
+    }
+    b.querySelector('#bkNow').onclick = () => Backup.run(true);
+    b.querySelector('#bkRestore').onclick = async e => {
+      if (!confirm('Load everything from the cloud backup onto this phone? Entries on this phone are kept; matching ones are replaced by the backup version.')) return;
+      e.target.disabled = true;
+      try { const n = await Backup.restore(); render(); toast(`Restored ${n} entries`); }
+      catch (err) { toast('Restore failed: ' + (err.message || err)); }
+      e.target.disabled = false;
+    };
+    b.querySelector('#bkOff').onclick = () => {
+      if (!confirm('Stop backing up? Your backup on GitHub stays where it is.')) return;
+      ['bk-cfg', 'bk-dirty', 'bk-last', 'bk-err', 'bk-photos'].forEach(k => store.set(k, null));
+      sheetBackup();
+    };
+  });
+}
+
 /* ---------------- Menu / settings / backup ---------------- */
 $('#btnMenu').onclick = () => {
   const opts = Object.entries(LAYERS).map(([k, v]) => `<button class="btn ${k === layerKey ? 'primary' : ''}" data-l="${k}">${v.name}</button>`).join('');
@@ -956,7 +1153,8 @@ $('#btnMenu').onclick = () => {
     ${places.map(p => `<button class="list-item" data-place="${p.id}">${placeIcon(p)}<span class="t"><b>${esc(p.name)}</b><small>${esc(p.place || '')}</small></span></button>`).join('')}
     <button class="btn block" id="oAddPlace">+ Add place</button>
     <label class="f">Backup</label>
-    <div class="sub" style="margin:0 0 4px">Everything lives only on this phone. Export a backup now and then (includes photos).</div>
+    <button class="list-item" id="oCloud"><span class="t"><b>☁ Cloud backup</b><small id="bkStatus">${Backup.label()}</small></span></button>
+    <div class="sub" style="margin:10px 0 4px">Backup file (manual)</div>
     <div class="row"><button class="btn" id="oExport">Export</button><button class="btn" id="oImport">Import</button></div>
     <div class="sub" style="margin-top:18px">${active().length} active · ${done().length} passed</div>`,
   b => {
@@ -964,6 +1162,7 @@ $('#btnMenu').onclick = () => {
     b.querySelector('#oLabels').onchange = e => { showLabels = e.target.checked; store.set('labels', showLabels); applyLayer(); };
     b.querySelectorAll('[data-place]').forEach(x => x.onclick = () => sheetPlace(placeById(x.dataset.place)));
     b.querySelector('#oAddPlace').onclick = () => sheetPlace(null);
+    b.querySelector('#oCloud').onclick = sheetBackup;
     b.querySelector('#oExport').onclick = exportData;
     b.querySelector('#oImport').onclick = () => { $('#importInput').value = ''; $('#importInput').click(); };
   });
@@ -1063,6 +1262,7 @@ tick(); setInterval(tick, 10000);
   if (mode !== 'all' && !CATS[mode]) mode = 'all';
   await rollAll();
   render();
+  Backup.run();   // finish any backup that was interrupted last time
   const over = active().filter(t => dueState(t) === 'over').length;
   const today = active().filter(t => t.due && t.due >= Date.now() && new Date(t.due).toDateString() === new Date().toDateString()).length;
   if (over || today) setTimeout(() => toast([over && `${over} overdue`, today && `${today} due today`].filter(Boolean).join(' · ')), 800);

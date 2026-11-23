@@ -156,8 +156,8 @@ body.picking #hud,body.picking #modebar,body.picking #bottomBar,body.picking #mo
 .row .btn{flex:1}
 
 /* ---------- Sheet ---------- */
-#scrim{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:800}
-#sheet{position:fixed;left:0;right:0;bottom:0;z-index:810;max-height:88vh;overflow:auto;-webkit-overflow-scrolling:touch;
+#scrim{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:950}
+#sheet{position:fixed;left:0;right:0;bottom:0;z-index:960;max-height:88vh;overflow:auto;-webkit-overflow-scrolling:touch;
   background:var(--panel-solid);border-top:1px solid var(--line);border-radius:22px 22px 0 0;padding:6px 18px calc(var(--safe-b) + 20px);
   transform:translateY(105%);transition:transform .28s cubic-bezier(.2,.8,.2,1)}
 #sheet.open{transform:none}
@@ -268,3 +268,7 @@ label.f{display:block;font-size:11px;font-weight:800;letter-spacing:1.5px;text-t
 .catgrid .cat:active{box-shadow:0 0 16px rgba(192,40,63,.8)}
 .catgrid .cat b{color:#fff;text-shadow:1px 0 0 #c0283f,-1px 0 0 #c0283f,0 1px 0 #c0283f,0 -1px 0 #c0283f,0 0 10px rgba(192,40,63,.9),0 0 4px rgba(192,40,63,.7)}
 .catgrid .cat .ic{border:1.5px solid #c0283f;box-shadow:0 0 10px rgba(192,40,63,.5),inset 0 0 6px rgba(192,40,63,.25)}
+
+/* selected category in the archive entry sheet */
+.catgrid .cat.on{border-color:#ff5a72;box-shadow:0 0 18px rgba(192,40,63,.9),inset 0 0 10px rgba(192,40,63,.5)}
+.catgrid .cat:not(.on){opacity:.85}
