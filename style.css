@@ -88,6 +88,7 @@ body[data-layer=sat] .base-tiles{filter:grayscale(.7) brightness(.38) contrast(1
 .blip.big{width:46px;height:46px}
 .blip.big svg{width:26px;height:26px}
 @keyframes pulse{0%{transform:scale(.7);opacity:1}100%{transform:scale(1.6);opacity:0}}
+.zh-line{stroke:url(#zhGrad)}
 /* fixed places: neon icons with a glow */
 .place{position:relative;width:40px;height:40px;border-radius:50%;background:#050505;color:var(--c);display:flex;align-items:center;justify-content:center;
   border:2.5px solid var(--c);box-shadow:0 0 10px var(--c),0 0 22px color-mix(in srgb,var(--c) 55%,transparent),inset 0 0 8px color-mix(in srgb,var(--c) 40%,transparent)}

@@ -176,6 +176,32 @@ if (window.ZH_BOUNDARY){
   });
 }
 
+// always-visible glowing outlines: Stadt Zürich (light blue → white) and Benglen (neon green like HQ)
+const BORDER_STYLE = {
+  'Zürich':  {glow:'#6cc8ff', line:'#ffffff', cls:'zh-line'},
+  'Benglen': {glow:'#39ff14', line:'#39ff14', cls:''},
+};
+for (const b of window.EXTRA_BORDERS || []){
+  const st = BORDER_STYLE[b.name] || BORDER_STYLE.Benglen;
+  const polys = b.geo.type === 'Polygon' ? [b.geo.coordinates] : b.geo.coordinates;
+  for (const p of polys){
+    const ring = p[0].map(([x, y]) => [y, x]);
+    L.polyline(ring, {pane:'mask', color:st.glow, weight:10, opacity:.18, interactive:false}).addTo(map);
+    L.polyline(ring, {pane:'mask', color:st.glow, weight:5, opacity:.4, interactive:false}).addTo(map);
+    L.polyline(ring, {pane:'mask', color:st.line, weight:1.8, opacity:1, interactive:false, className:st.cls}).addTo(map);
+  }
+}
+// SVG gradient used by .zh-line (defined inside the pane's SVG so url(#zhGrad) resolves)
+{
+  const svg = map.getPane('mask').querySelector('svg');
+  if (svg){
+    const ns = 'http://www.w3.org/2000/svg';
+    const defs = document.createElementNS(ns, 'defs');
+    defs.innerHTML = '<linearGradient id="zhGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7fd6ff"/><stop offset=".5" stop-color="#ffffff"/><stop offset="1" stop-color="#7fd6ff"/></linearGradient>';
+    svg.insertBefore(defs, svg.firstChild);
+  }
+}
+
 const markers = L.layerGroup().addTo(map);
 let meMarker = null;
 
