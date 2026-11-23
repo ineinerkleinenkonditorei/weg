@@ -19,7 +19,10 @@
 svg text{font-weight:900!important}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:var(--font);overscroll-behavior:none}
-button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;touch-action:manipulation}
+button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;touch-action:manipulation;-webkit-appearance:none;appearance:none;padding:0;margin:0}
+/* robust icon centering (iOS Safari) */
+.icon-btn,.round-btn,#btnAdd{display:flex!important;align-items:center;justify-content:center;padding:0;line-height:0}
+.icon-btn svg,.round-btn svg,#btnAdd svg{display:block;flex:none}
 input,textarea{font:inherit;color:var(--text)}
 svg{fill:currentColor}
 [hidden]{display:none!important}
@@ -71,7 +74,7 @@ body[data-layer=sat] .base-tiles{filter:grayscale(.7) brightness(.38) contrast(1
 .round-btn{width:50px;height:50px;border-radius:50%;background:var(--panel);border:1px solid var(--line);display:grid;place-items:center;backdrop-filter:blur(8px)}
 .round-btn svg{width:24px;height:24px}
 #btnAdd{width:70px;height:70px;border-radius:50%;background:var(--grad);box-shadow:0 6px 24px rgba(255,61,139,.5),inset 0 -3px 0 rgba(0,0,0,.2);display:grid;place-items:center}
-#btnAdd span{font-family:var(--font-hud);font-size:44px;line-height:1;color:#1a0b18;margin-top:-4px}
+#btnAdd svg{width:30px;height:30px;color:#1a0b18}
 
 /* ---------- Blips ---------- */
 .blip-wrap{background:none;border:0}
