@@ -86,6 +86,29 @@ body[data-layer=sat] .base-tiles{filter:grayscale(.7) brightness(.38) contrast(1
 .blip.big{width:46px;height:46px}
 .blip.big svg{width:26px;height:26px}
 @keyframes pulse{0%{transform:scale(.7);opacity:1}100%{transform:scale(1.6);opacity:0}}
+/* fixed places: neon icons with a glow */
+.place{position:relative;width:40px;height:40px;border-radius:50%;background:#050505;color:var(--c);display:flex;align-items:center;justify-content:center;
+  border:2.5px solid var(--c);box-shadow:0 0 10px var(--c),0 0 22px color-mix(in srgb,var(--c) 55%,transparent),inset 0 0 8px color-mix(in srgb,var(--c) 40%,transparent)}
+.place svg{width:22px;height:22px;display:block;filter:drop-shadow(0 0 4px var(--c))}
+.place.hq{width:52px;height:52px;border-width:3px}
+.place.hq svg{width:28px;height:28px}
+.place.open{background:var(--c);color:#050505}
+.place.open svg{filter:none}
+.place .badge{position:absolute;top:-5px;right:-5px;min-width:20px;height:20px;padding:0 5px;border-radius:10px;background:#ff3b30;color:#fff;
+  font-size:12px;line-height:20px;text-align:center;box-shadow:0 0 0 2px #050505}
+.ring-bg{border-radius:50%;background:radial-gradient(circle,rgba(0,0,0,.75) 55%,rgba(0,0,0,.45) 100%);border:1px solid color-mix(in srgb,var(--c) 50%,transparent);
+  box-shadow:0 0 18px color-mix(in srgb,var(--c) 35%,transparent);pointer-events:none}
+#pickChips{display:flex;gap:8px;overflow-x:auto;margin:-2px -12px 12px;padding:2px 12px;scrollbar-width:none}
+.pchip{flex:none;display:flex;align-items:center;gap:8px;padding:5px 12px 5px 5px;border-radius:24px;border:1px solid var(--c);background:rgba(255,255,255,.04);font-size:14px}
+.pchip .place{width:30px;height:30px;border-width:2px;box-shadow:0 0 6px var(--c)}
+.pchip .place svg{width:16px;height:16px}
+.pick-row{display:flex;gap:8px;flex-wrap:wrap}
+.pick-opt{width:46px;height:46px;border-radius:12px;display:flex;align-items:center;justify-content:center;border:1px solid var(--line);background:rgba(255,255,255,.05);color:var(--c)}
+.pick-opt svg{width:24px;height:24px}
+.pick-opt.on{border:2px solid var(--c);box-shadow:0 0 10px var(--c)}
+.pick-opt.swatch{background:var(--c)}
+.list-item .place{flex:none;width:36px;height:36px}
+.list-item .place svg{width:20px;height:20px}
 .me-dot{width:18px;height:18px;border-radius:50%;background:#fff;border:4px solid #2f80ff;box-shadow:0 0 0 6px rgba(47,128,255,.25)}
 
 /* ---------- Picker ---------- */

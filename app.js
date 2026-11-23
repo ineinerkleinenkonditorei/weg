@@ -50,11 +50,12 @@ const DB = {
   db: null,
   open(){
     return new Promise((res, rej) => {
-      const r = indexedDB.open('zh-story', 1);
+      const r = indexedDB.open('zh-story', 2);
       r.onupgradeneeded = () => {
         const d = r.result;
         if (!d.objectStoreNames.contains('tasks')) d.createObjectStore('tasks', {keyPath:'id'});
         if (!d.objectStoreNames.contains('photos')) d.createObjectStore('photos');
+        if (!d.objectStoreNames.contains('places')) d.createObjectStore('places', {keyPath:'id'});
       };
       r.onsuccess = () => { this.db = r.result; res(); };
       r.onerror = () => rej(r.error);
@@ -74,6 +75,35 @@ const DB = {
   put(st, v, k){ return this.tx(st, 'readwrite', s => k === undefined ? s.put(v) : s.put(v, k)); },
   del(st, k){ return this.tx(st, 'readwrite', s => s.delete(k)); },
 };
+
+/* ---------------- Fixed places (headquarter, garage, gym …) ---------------- */
+const PLACE_ICONS = {
+  hq:     '<svg viewBox="0 0 24 24"><path d="M3 21V9.5L12 3l9 6.5V21h-6v-6H9v6zm8-12h2V7h-2z"/></svg>',
+  home:   '<svg viewBox="0 0 24 24"><path d="M12 3l9 8h-3v9h-5v-6h-2v6H6v-9H3z"/></svg>',
+  garage: '<svg viewBox="0 0 24 24"><path d="M21 7.5a5 5 0 0 1-6.6 4.7L6.7 20a2 2 0 0 1-2.8-2.8l7.8-7.7A5 5 0 0 1 17.6 3l-3 3 .9 2.5 2.5.9z"/></svg>',
+  gym:    '<svg viewBox="0 0 24 24"><path d="M1 10h2V8h2v8H3v-2H1zm22 0h-2V8h-2v8h2v-2h2zM6 6h3v12H6zm9 0h3v12h-3zm-6 5h6v2H9z"/></svg>',
+  work:   '<svg viewBox="0 0 24 24"><path d="M9 4h6a2 2 0 0 1 2 2v1h3a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h3V6a2 2 0 0 1 2-2zm0 3h6V6H9z"/></svg>',
+  pin:    '<svg viewBox="0 0 24 24"><path d="M12 2a7 7 0 0 1 7 7c0 5-7 13-7 13S5 14 5 9a7 7 0 0 1 7-7zm0 4.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z"/></svg>',
+};
+const PLACE_COLORS = ['#39ff14', '#00e5ff', '#ffd400', '#ff2bd6', '#ff6a00', '#ffffff'];
+const HQ_DEFAULT = {id:'hq', hq:true, name:'Headquarter', icon:'hq', color:'#39ff14', lat:47.3614084, lng:8.6375598};
+let places = [];
+let openPlaceId = null;   // place whose objectives are fanned out in a ring
+const placeById = id => places.find(p => p.id === id);
+const hq = () => placeById('hq') || HQ_DEFAULT;
+function placeIcon(p, cls = '', badge = 0){
+  const b = badge ? `<span class="badge">${badge > 99 ? '99+' : badge}</span>` : '';
+  return `<div class="place ${p.hq ? 'hq' : ''} ${cls}" style="--c:${p.color}">${PLACE_ICONS[p.icon] || PLACE_ICONS.pin}${b}</div>`;
+}
+async function savePlace(p){
+  await DB.put('places', p);
+  // keep objectives stored at this place in sync with its position / name
+  for (const t of tasks){
+    let changed = false;
+    for (const s of t.steps) if (s.placeId === p.id){ s.lat = p.lat; s.lng = p.lng; s.place = p.name; changed = true; }
+    if (changed) await DB.put('tasks', t);
+  }
+}
 
 /* ---------------- State ---------------- */
 let tasks = [];
@@ -102,7 +132,8 @@ const map = L.map('map', {
   zoomControl:false, zoomSnap:.25, minZoom:9, maxZoom:19,
   maxBounds:ZH.pad(.35), maxBoundsViscosity:.9, attributionControl:true,
 });
-map.fitBounds(ZH, {padding:[10, 10]});
+const START_ZOOM = 15;
+map.setView([HQ_DEFAULT.lat, HQ_DEFAULT.lng], START_ZOOM);
 map.attributionControl.setPrefix(false);
 
 map.createPane('labels'); map.getPane('labels').style.zIndex = 390; map.getPane('labels').style.pointerEvents = 'none';
@@ -146,19 +177,67 @@ if (window.ZH_BOUNDARY){
 const markers = L.layerGroup().addTo(map);
 let meMarker = null;
 
+function taskMarker(t, ll, z = 0){
+  const badge = t.steps.length > 1 ? `<span class="stp">${t.cur + 1}/${t.steps.length}</span>` : '';
+  const icon = L.divIcon({className:'blip-wrap', html:blip(t.cat, t.id === selectedId ? 'sel' : '', badge), iconSize:[34, 34], iconAnchor:[17, 17]});
+  return L.marker(ll, {icon, zIndexOffset:z + (t.cat === 'story' ? 500 : 0)}).on('click', () => openMission(t.id));
+}
+
 function render(){
   markers.clearLayers();
+  const atPlace = {};
   for (const t of visible()){
     const s = t.steps[t.cur];
     if (!s) continue;
-    const badge = t.steps.length > 1 ? `<span class="stp">${t.cur + 1}/${t.steps.length}</span>` : '';
-    const icon = L.divIcon({className:'blip-wrap', html:blip(t.cat, t.id === selectedId ? 'sel' : '', badge), iconSize:[34, 34], iconAnchor:[17, 17]});
-    L.marker([s.lat, s.lng], {icon, zIndexOffset: t.cat === 'story' ? 500 : 0})
-      .on('click', () => openMission(t.id))
+    if (s.placeId && placeById(s.placeId)){ (atPlace[s.placeId] ||= []).push(t); continue; }
+    taskMarker(t, [s.lat, s.lng]).addTo(markers);
+  }
+  for (const p of places){
+    const list = atPlace[p.id] || [];
+    const size = p.hq ? 52 : 40;
+    const open = p.id === openPlaceId && list.length;
+    const icon = L.divIcon({className:'blip-wrap', html:placeIcon(p, open ? 'open' : '', open ? 0 : list.length), iconSize:[size, size], iconAnchor:[size / 2, size / 2]});
+    L.marker([p.lat, p.lng], {icon, zIndexOffset: p.hq ? 3000 : 2500})
+      .on('click', () => togglePlace(p, list.length))
       .addTo(markers);
+    if (open) drawRing(p, list, size);
   }
   renderModes();
 }
+
+// fan the objectives stored at a place out in rings around it
+function drawRing(p, list, size){
+  const BLIP = 34, GAP = 10, STEP = BLIP + GAP;
+  const c = map.latLngToContainerPoint([p.lat, p.lng]);
+  const rings = [];
+  let left = list.length, r = size / 2 + 14 + BLIP / 2;
+  while (left > 0){
+    const cap = Math.max(1, Math.floor(2 * Math.PI * r / STEP));
+    const n = Math.min(cap, left);
+    rings.push({r, n});
+    left -= n; r += STEP;
+  }
+  const outer = rings[rings.length - 1].r + BLIP / 2 + 12;
+  const bg = L.divIcon({className:'blip-wrap', html:`<div class="ring-bg" style="--c:${p.color};width:${outer * 2}px;height:${outer * 2}px"></div>`, iconSize:[outer * 2, outer * 2], iconAnchor:[outer, outer]});
+  L.marker([p.lat, p.lng], {icon:bg, interactive:false, zIndexOffset:2000}).addTo(markers);
+  let i = 0;
+  for (const {r, n} of rings){
+    const off = rings.length > 1 && r !== rings[0].r ? Math.PI / n : 0;
+    for (let k = 0; k < n; k++, i++){
+      const a = -Math.PI / 2 + off + k * 2 * Math.PI / n;
+      const ll = map.containerPointToLatLng([c.x + r * Math.cos(a), c.y + r * Math.sin(a)]);
+      taskMarker(list[i], ll, 4000).addTo(markers);
+    }
+  }
+}
+function togglePlace(p, n){
+  if (!n){ toast(`${p.name}: no objectives here`); openPlaceId = null; render(); return; }
+  openPlaceId = openPlaceId === p.id ? null : p.id;
+  if (openPlaceId) map.panTo([p.lat, p.lng]);
+  render();
+}
+map.on('zoomend', () => { if (openPlaceId) render(); });
+map.on('click', () => { if (openPlaceId && !pickCb){ openPlaceId = null; render(); } });
 
 /* ---------------- Mode bar ---------------- */
 function renderModes(){
@@ -192,7 +271,7 @@ function openSheet(html, mount, onClose){
   $('#sheetBody').innerHTML = html;
   sheet.scrollTop = 0;
   scrim.hidden = false;
-  requestAnimationFrame(() => sheet.classList.add('open'));
+  requestAnimationFrame(() => { if (!scrim.hidden) sheet.classList.add('open'); });
   onSheetClose = onClose || null;
   mount && mount($('#sheetBody'));
 }
@@ -338,12 +417,29 @@ async function finishDraft(){
 
 /* ---------------- Place picker ---------------- */
 let pickCb = null, pickTarget = null, revT = null, revCtl = null, prevView = null;
+// cat: a category key, or a place object when positioning a fixed place
 function startPick(cat, step, cb){
   pickCb = cb; pickTarget = step;
   sheet.classList.remove('open'); scrim.hidden = true; onSheetClose = null;
+  openPlaceId = null; render();
   document.body.classList.add('picking');
   $('#picker').hidden = false;
-  $('#crossBlip').outerHTML = `<div id="crossBlip" class="blip big" style="--c:${CATS[cat].color}">${CATS[cat].icon}</div>`;
+  const forPlace = typeof cat === 'object';
+  $('#crossBlip').outerHTML = forPlace
+    ? `<div id="crossBlip" class="blip big" style="--c:${cat.color}">${PLACE_ICONS[cat.icon] || PLACE_ICONS.pin}</div>`
+    : `<div id="crossBlip" class="blip big" style="--c:${CATS[cat].color}">${CATS[cat].icon}</div>`;
+  const chips = $('#pickChips');
+  chips.innerHTML = forPlace ? '' : places.map(p => `<button class="pchip" data-p="${p.id}" style="--c:${p.color}">${placeIcon(p)}<span>${esc(p.name)}</span></button>`).join('');
+  chips.hidden = forPlace || !places.length;
+  chips.querySelectorAll('.pchip').forEach(b => b.onclick = () => {
+    const p = placeById(b.dataset.p);
+    Object.assign(pickTarget, {lat:p.lat, lng:p.lng, place:p.name, placeId:p.id});
+    document.body.classList.remove('picking');
+    $('#picker').hidden = true;
+    const f = pickCb; pickCb = null;
+    if (prevView) map.setView(prevView.c, prevView.z);
+    f && f(true);
+  });
   $('#searchInput').value = ''; $('#searchResults').innerHTML = '';
   map.stop();
   prevView = {c:map.getCenter(), z:map.getZoom()};
@@ -359,6 +455,7 @@ function endPick(ok){
     const c = map.getCenter();
     pickTarget.lat = +c.lat.toFixed(6); pickTarget.lng = +c.lng.toFixed(6);
     pickTarget.place = $('#pickPlace').dataset.place || `${c.lat.toFixed(4)}, ${c.lng.toFixed(4)}`;
+    delete pickTarget.placeId;
   }
   cb && cb(ok);
 }
@@ -671,6 +768,9 @@ $('#btnMenu').onclick = () => {
     <div class="h grad">Settings</div>
     <label class="f">Map style</label><div class="row">${opts}</div>
     <label class="toggle"><span>Show place names</span><input type="checkbox" id="oLabels" ${showLabels ? 'checked' : ''}></label>
+    <label class="f">Fixed places</label>
+    ${places.map(p => `<button class="list-item" data-place="${p.id}">${placeIcon(p)}<span class="t"><b>${esc(p.name)}</b><small>${esc(p.place || '')}</small></span></button>`).join('')}
+    <button class="btn block" id="oAddPlace">+ Add place</button>
     <label class="f">Backup</label>
     <div class="sub" style="margin:0 0 4px">Everything lives only on this phone. Export a backup now and then (includes photos).</div>
     <div class="row"><button class="btn" id="oExport">Export</button><button class="btn" id="oImport">Import</button></div>
@@ -678,16 +778,64 @@ $('#btnMenu').onclick = () => {
   b => {
     b.querySelectorAll('[data-l]').forEach(x => x.onclick = () => { layerKey = x.dataset.l; store.set('layer', layerKey); applyLayer(); $('#btnMenu').click(); });
     b.querySelector('#oLabels').onchange = e => { showLabels = e.target.checked; store.set('labels', showLabels); applyLayer(); };
+    b.querySelectorAll('[data-place]').forEach(x => x.onclick = () => sheetPlace(placeById(x.dataset.place)));
+    b.querySelector('#oAddPlace').onclick = () => sheetPlace(null);
     b.querySelector('#oExport').onclick = exportData;
     b.querySelector('#oImport').onclick = () => { $('#importInput').value = ''; $('#importInput').click(); };
   });
 };
-const blobToDataURL = b => new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(b); });
+function sheetPlace(existing){
+  const p = existing ? {...existing} : {id:uid(), name:'', icon:'pin', color:PLACE_COLORS[1]};
+  const draw = () => openSheet(`
+    <div class="h grad">${existing ? 'Edit place' : 'New place'}</div>
+    <label class="f">Name</label>
+    <input class="inp" id="plName" maxlength="30" placeholder="e.g. garage, gym" value="${esc(p.name)}">
+    <label class="f">Icon</label>
+    <div class="pick-row">${Object.keys(PLACE_ICONS).map(k => `<button class="pick-opt ${p.icon === k ? 'on' : ''}" data-icon="${k}" style="--c:${p.color}">${PLACE_ICONS[k]}</button>`).join('')}</div>
+    <label class="f">Colour</label>
+    <div class="pick-row">${PLACE_COLORS.map(c => `<button class="pick-opt swatch ${p.color === c ? 'on' : ''}" data-color="${c}" style="--c:${c}"></button>`).join('')}</div>
+    <label class="f">Location</label>
+    <button class="btn block" id="plLoc">${p.lat ? '📍 ' + esc(p.place || 'Location set') + ' · move' : '📍 Set location'}</button>
+    <button class="btn primary block" id="plSave">Save</button>
+    ${existing && !existing.hq ? '<button class="btn ghost danger block" id="plDel">Delete place</button>' : ''}
+    <button class="btn ghost block" id="plBack">Back</button>`,
+  b => {
+    const name = b.querySelector('#plName'), save = b.querySelector('#plSave');
+    const upd = () => save.disabled = !name.value.trim() || !p.lat;
+    name.oninput = () => { p.name = name.value; upd(); }; upd();
+    b.querySelectorAll('[data-icon]').forEach(x => x.onclick = () => { p.icon = x.dataset.icon; draw(); });
+    b.querySelectorAll('[data-color]').forEach(x => x.onclick = () => { p.color = x.dataset.color; draw(); });
+    b.querySelector('#plLoc').onclick = () => startPick(p, p, () => draw());
+    b.querySelector('#plBack').onclick = () => $('#btnMenu').click();
+    save.onclick = async () => {
+      p.name = name.value.trim();
+      delete p.placeId;
+      if (existing) Object.assign(existing, p); else places.push(p);
+      await savePlace(existing || p);
+      render(); $('#btnMenu').click(); toast(`${p.name} saved`);
+    };
+    const del = b.querySelector('#plDel');
+    if (del) del.onclick = async () => {
+      if (!confirm(`Delete "${existing.name}"? Objectives there stay on the map as normal pins.`)) return;
+      for (const t of tasks){
+        let ch = false;
+        for (const s of t.steps) if (s.placeId === existing.id){ delete s.placeId; ch = true; }
+        if (ch) await saveTask(t);
+      }
+      await DB.del('places', existing.id);
+      places = places.filter(x => x.id !== existing.id);
+      render(); $('#btnMenu').click();
+    };
+  });
+  draw();
+}
+
+const blobToDataURL =b => new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(b); });
 async function exportData(){
   toast('Preparing backup…');
   const photos = {};
   for (const k of await DB.allKeys('photos')) photos[k] = await blobToDataURL(await DB.get('photos', k));
-  const json = JSON.stringify({app:'zh-story', v:1, exported:Date.now(), tasks, photos});
+  const json = JSON.stringify({app:'zh-story', v:1, exported:Date.now(), tasks, places, photos});
   const name = `zh-story-backup-${new Date().toISOString().slice(0, 10)}.json`;
   const file = new File([json], name, {type:'application/json'});
   if (navigator.canShare && navigator.canShare({files:[file]})){
@@ -702,7 +850,9 @@ $('#importInput').onchange = async e => {
     if (d.app !== 'zh-story') throw new Error('bad file');
     for (const [k, v] of Object.entries(d.photos || {})) await DB.put('photos', await (await fetch(v)).blob(), k);
     for (const t of d.tasks || []) await DB.put('tasks', t);
+    for (const p of d.places || []) await DB.put('places', p);
     tasks = await DB.all('tasks');
+    places = await DB.all('places');
     closeSheet(); render(); toast(`Imported ${d.tasks.length} missions`);
   } catch { toast('That file is not a ZH Story backup'); }
 };
@@ -720,8 +870,12 @@ tick(); setInterval(tick, 10000);
   try {
     await DB.open();
     tasks = await DB.all('tasks');
+    places = await DB.all('places');
+    if (!placeById('hq')){ places.unshift({...HQ_DEFAULT, place:'Bodenacherstrasse 46, Benglen'}); await DB.put('places', places[0]); }
+    places.sort((a, b) => (b.hq ? 1 : 0) - (a.hq ? 1 : 0));
     if (navigator.storage && navigator.storage.persist) navigator.storage.persist();
-  } catch (e) { toast('Storage unavailable — data won\'t be saved'); }
+  } catch (e) { toast('Storage unavailable — data won\'t be saved'); if (!places.length) places = [{...HQ_DEFAULT}]; }
+  map.setView([hq().lat, hq().lng], START_ZOOM);
   if (mode !== 'all' && !CATS[mode]) mode = 'all';
   render();
 })();
