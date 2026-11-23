@@ -338,3 +338,12 @@ body.intro #hud,body.intro #modebar,body.intro #bottomBar,body.intro #modeTitle,
   animation:fxFlick 5s steps(1) infinite}
 @keyframes fxFlick{0%,100%{opacity:1}47%{opacity:.75}49%{opacity:1}83%{opacity:.85}}
 @media (prefers-reduced-motion:reduce){#fx *{animation:none!important}.intro-fx{display:none}}
+/* two corners: the top-right one is the same layer turned 180°, with its motion offset in time */
+.fx-corner{position:absolute;inset:0}
+.fx-corner.tr{transform:rotate(180deg)}
+.fx-corner.tr .b1{animation-delay:-11s}
+.fx-corner.tr .b2{animation-delay:-19s}
+.fx-corner.tr .b3{animation-delay:-6s}
+.fx-corner.tr .r1{animation-delay:-14s}
+.fx-corner.tr .r2{animation-delay:-30s}
+.fx-corner.tr .fx-scan{animation-delay:-2.3s}
