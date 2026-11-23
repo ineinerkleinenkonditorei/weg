@@ -290,3 +290,51 @@ i.star{font-style:normal;color:#ffd400;text-shadow:0 0 8px rgba(255,212,0,.7)}
 .star-stat{text-align:left}
 .star-stat b{color:#ffd400!important;text-shadow:0 0 10px rgba(255,212,0,.5)}
 .star-btn.on{color:#ffd400;border-color:#ffd400;box-shadow:0 0 14px rgba(255,212,0,.35)}
+
+/* ================= start-up animation ================= */
+.intro-fx{position:fixed;top:-20%;bottom:-20%;left:0;width:300%;transform:translateX(-66.667%);will-change:transform;pointer-events:none}
+/* red multiply layer: white streets turn red, black stays black; the white part leaves the map untouched */
+.intro-fx.tint{z-index:450;background:linear-gradient(105deg,#fff 0 30.5%,#ff9aa5 32%,#ff1f3a 33.6% 100%);mix-blend-mode:multiply}
+/* bright light streak riding the edge of the wipe */
+.intro-fx.streak{z-index:451;background:linear-gradient(105deg,transparent 30.8%,rgba(255,60,80,.35) 31.8%,rgba(255,190,200,1) 32.6%,rgba(255,60,80,.35) 33.4%,transparent 34.4%);mix-blend-mode:screen;filter:blur(3px)}
+/* black curtain with a glowing red leading edge – reveals the red streets */
+.intro-fx.cover{z-index:452;pointer-events:auto;background:linear-gradient(105deg,transparent 0 30.6%,rgba(255,40,60,.85) 32.3%,rgba(60,0,8,1) 33.4%,#000 34.2% 100%)}
+body.intro-go .intro-fx.cover{animation:introSweep 1.3s cubic-bezier(.55,.05,.35,1) forwards}
+body.intro-go .intro-fx.tint,body.intro-go .intro-fx.streak{animation:introSweep 1.15s cubic-bezier(.6,.02,.3,1) 2s forwards}
+body.intro-go #map{animation:introPulse .7s ease-in-out 1.3s 1}
+@keyframes introSweep{to{transform:translateX(34%)}}
+@keyframes introPulse{40%{filter:brightness(1.35)}}
+/* while the intro runs: extra-strong glow, hide icons and HUD */
+body.intro .glow-tiles{opacity:1!important;filter:grayscale(1) brightness(1.6) contrast(5) blur(5px)!important}
+#hud,#modebar,#bottomBar,#modeTitle,#fx,.leaflet-marker-pane{transition:opacity .9s ease}
+body.intro #hud,body.intro #modebar,body.intro #bottomBar,body.intro #modeTitle,body.intro #fx,body.intro .leaflet-marker-pane{opacity:0}
+
+/* ================= sci-fi corner vignette (bottom-left) ================= */
+#fx{position:fixed;inset:0;z-index:420;pointer-events:none;overflow:hidden}
+.fx-dark{position:absolute;left:-35vmax;bottom:-35vmax;width:100vmax;height:100vmax;background:radial-gradient(circle,rgba(0,0,0,.8) 0%,rgba(0,0,0,.45) 30%,transparent 62%)}
+.fx-blob{position:absolute;border-radius:50%;mix-blend-mode:screen;will-change:transform}
+.fx-blob.b1{left:-28vmax;bottom:-28vmax;width:72vmax;height:72vmax;background:radial-gradient(circle,rgba(160,18,40,.42) 0%,rgba(122,18,34,.16) 38%,transparent 64%);animation:fxB1 23s ease-in-out infinite alternate}
+.fx-blob.b2{left:-8vmax;bottom:-20vmax;width:46vmax;height:46vmax;background:radial-gradient(circle,rgba(200,30,55,.32) 0%,rgba(122,18,34,.14) 40%,transparent 68%);animation:fxB2 31s ease-in-out infinite alternate}
+.fx-blob.b3{left:-22vmax;bottom:2vmax;width:38vmax;height:38vmax;background:radial-gradient(circle,rgba(110,10,25,.45) 0%,transparent 64%);animation:fxB3 17s ease-in-out infinite alternate}
+@keyframes fxB1{0%{transform:translate(0,0) scale(1)}30%{transform:translate(7vmax,-5vmax) scale(1.14)}65%{transform:translate(-3vmax,-10vmax) scale(.9)}100%{transform:translate(9vmax,3vmax) scale(1.06)}}
+@keyframes fxB2{0%{transform:translate(0,0) scale(.9)}45%{transform:translate(10vmax,-7vmax) scale(1.2)}100%{transform:translate(-4vmax,-14vmax) scale(1)}}
+@keyframes fxB3{0%{transform:translate(0,0)}50%{transform:translate(6vmax,-12vmax) scale(1.25)}100%{transform:translate(12vmax,-4vmax) scale(.85)}}
+.fx-grid{position:absolute;left:0;bottom:0;width:75vmax;height:75vmax;opacity:.85;
+  background-image:linear-gradient(rgba(255,60,80,.28) 1px,transparent 1px),linear-gradient(90deg,rgba(255,60,80,.28) 1px,transparent 1px);background-size:24px 24px;
+  -webkit-mask-image:radial-gradient(circle at 0 100%,#000 0,rgba(0,0,0,.45) 26vmax,transparent 48vmax);mask-image:radial-gradient(circle at 0 100%,#000 0,rgba(0,0,0,.45) 26vmax,transparent 48vmax);
+  animation:fxGrid 9s linear infinite}
+@keyframes fxGrid{to{background-position:24px -24px}}
+.fx-ring{position:absolute;left:-110px;bottom:-110px;width:340px;height:340px;will-change:transform}
+.fx-ring circle{fill:none;stroke:#ff3a55;filter:drop-shadow(0 0 3px #ff2a45)}
+.fx-ring.r1{opacity:.9;animation:fxSpin 38s linear infinite}
+.fx-ring.r1 circle{stroke-width:1;stroke-dasharray:3 5}
+.fx-ring.r2{opacity:.75;animation:fxSpin 64s linear infinite reverse}
+.fx-ring.r2 circle{stroke-width:1.8;stroke-dasharray:70 22 6 22}
+.fx-ring.r3{opacity:.6;animation:fxSpin 95s linear infinite}
+.fx-ring.r3 circle{stroke-width:.8;stroke-dasharray:1 3}
+@keyframes fxSpin{to{transform:rotate(360deg)}}
+.fx-scan{position:absolute;inset:0;background:repeating-linear-gradient(0deg,rgba(0,0,0,.22) 0 1px,transparent 1px 3px);
+  -webkit-mask-image:radial-gradient(circle at 0 100%,#000 0,transparent 55vmax);mask-image:radial-gradient(circle at 0 100%,#000 0,transparent 55vmax);
+  animation:fxFlick 5s steps(1) infinite}
+@keyframes fxFlick{0%,100%{opacity:1}47%{opacity:.75}49%{opacity:1}83%{opacity:.85}}
+@media (prefers-reduced-motion:reduce){#fx *{animation:none!important}.intro-fx{display:none}}
