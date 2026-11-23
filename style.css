@@ -37,8 +37,9 @@ svg{fill:currentColor}
 body[data-layer=atlas] .base-tiles{filter:grayscale(1) brightness(1.5) contrast(4.8);mix-blend-mode:lighten}
 /* neon glow BEHIND the streets: a tight bright halo + a wide soft halo */
 /* brightness 1.45 × contrast 6 → land goes to pure black, only streets feed the glow */
-.glow-tiles{filter:grayscale(1) brightness(1.45) contrast(6) blur(2px);mix-blend-mode:screen;opacity:1;pointer-events:none}
-.glow-wide{filter:grayscale(1) brightness(1.45) contrast(6) blur(7px);mix-blend-mode:screen;opacity:1;pointer-events:none}
+/* …then blurred and AMPLIFIED afterwards (brightness after blur) → big, bright halo while black stays black */
+.glow-tiles{filter:grayscale(1) brightness(1.45) contrast(6) blur(3px) brightness(2.4);mix-blend-mode:screen;opacity:1;pointer-events:none}
+.glow-wide{filter:grayscale(1) brightness(1.45) contrast(6) blur(11px) brightness(3.4);mix-blend-mode:screen;opacity:1;pointer-events:none}
 /* satellite under a heavy dark overlay so it reads as a map, not a photo */
 body[data-layer=sat] .base-tiles{filter:grayscale(.7) brightness(.38) contrast(1.25)}
 .leaflet-control-attribution{font-size:9px;background:rgba(0,0,0,.45)!important;color:#bbb}
@@ -50,7 +51,7 @@ body[data-layer=sat] .base-tiles{filter:grayscale(.7) brightness(.38) contrast(1
   background:linear-gradient(180deg,rgba(5,6,16,.75),rgba(5,6,16,0))}
 #hud>*{pointer-events:auto}
 #clock{font-family:var(--font-hud);font-size:34px;line-height:1;letter-spacing:1px;text-shadow:0 2px 0 #000}
-#date{font-size:11px;font-weight:800;letter-spacing:2px;text-transform:uppercase;color:#39ff14;text-shadow:0 0 6px rgba(57,255,20,.7),0 0 14px rgba(57,255,20,.35);margin-top:3px}
+#date{font-size:11px;font-weight:800;letter-spacing:2px;text-transform:uppercase;color:#8aa9c9;text-shadow:0 0 6px rgba(138,169,201,.45);margin-top:3px}
 .hud-right{display:flex;gap:8px}
 .icon-btn{width:42px;height:42px;border-radius:50%;display:grid;place-items:center;background:var(--panel);border:1px solid var(--line);backdrop-filter:blur(8px)}
 .icon-btn svg{width:22px;height:22px}
