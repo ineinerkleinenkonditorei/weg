@@ -133,7 +133,7 @@ async function saveTask(t){ await DB.put('tasks', t); }
 /* ---------------- Map ---------------- */
 const ZH = L.latLngBounds([47.155, 8.355], [47.70, 8.99]);
 const map = L.map('map', {
-  zoomControl:false, zoomSnap:.25, minZoom:9, maxZoom:19,
+  zoomControl:false, zoomSnap:1, minZoom:9, maxZoom:19,   // whole zoom levels = tiles never stretched
   maxBounds:ZH.pad(.35), maxBoundsViscosity:.9, attributionControl:true,
 });
 const START_ZOOM = 15;
@@ -145,11 +145,15 @@ map.createPane('mask');   map.getPane('mask').style.zIndex = 395;   map.getPane(
 
 const OSM = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
 const ESRI = 'https://server.arcgisonline.com/ArcGIS/rest/services/';
+// sharp on iPhone: on high-density screens load one zoom level deeper at half size (detectRetina).
+// maxNativeZoom = deepest level the source has, minus 1 on retina because of that offset.
+const RETINA = L.Browser.retina;
+const sharp = (deepest, extra) => ({detectRetina:true, maxZoom:20, maxNativeZoom:RETINA ? deepest - 1 : deepest, ...extra});
 const LAYERS = {
-  atlas:  {name:'Atlas', base:L.tileLayer(ESRI + 'Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {maxZoom:19, maxNativeZoom:16, className:'base-tiles', attribution:'&copy; Esri, HERE, ' + OSM}),
-           glow:L.tileLayer(ESRI + 'Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {maxZoom:19, maxNativeZoom:16, className:'glow-tiles'}),
+  atlas:  {name:'Atlas', base:L.tileLayer(ESRI + 'Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', sharp(16, {className:'base-tiles', attribution:'&copy; Esri, HERE, ' + OSM})),
+           glow:L.tileLayer(ESRI + 'Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', sharp(16, {className:'glow-tiles'})),
            labels:L.tileLayer(ESRI + 'Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}', {maxZoom:14, pane:'labels'})},
-  sat:    {name:'Satellite', base:L.tileLayer('https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.swissimage/default/current/3857/{z}/{x}/{y}.jpeg', {maxZoom:19, className:'base-tiles', attribution:'&copy; swisstopo'}),
+  sat:    {name:'Satellite', base:L.tileLayer('https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.swissimage/default/current/3857/{z}/{x}/{y}.jpeg', sharp(19, {className:'base-tiles', attribution:'&copy; swisstopo'})),
            labels:L.tileLayer(ESRI + 'Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {maxZoom:19, pane:'labels'})},
 };
 let layerKey = store.get('layer', 'atlas');

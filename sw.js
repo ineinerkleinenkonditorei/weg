@@ -1,5 +1,5 @@
 // App-shell cache so the app opens instantly / offline. Map tiles are cached as you browse.
-const V = 'zh-story-v16';
+const V = 'zh-story-v17';
 const SHELL = ['./', 'index.html', 'style.css', 'app.js', 'zh-boundary.js', 'manifest.json', 'icon-180.png', 'icon-192.png',
   'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css', 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'];
 
