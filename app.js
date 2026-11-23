@@ -1099,6 +1099,7 @@ const Backup = {
     const r = await this.api('contents/' + path, {method:'PUT', body:JSON.stringify({message:msg, content:b64, ...(sha ? {sha} : {})})});
     if (!r.ok) throw new Error(`GitHub ${r.status}`);
   },
+  applying:false,   // true while writing changes that came FROM the cloud (no timestamps, no re-upload)
   dirty(){
     if (!this.cfg()) return;
     store.set('bk-dirty', true);
@@ -1107,27 +1108,101 @@ const Backup = {
   status(s, msg){ this.state = s; if (msg !== undefined) store.set('bk-err', msg); const el = $('#bkStatus'); if (el) el.innerHTML = this.label(); },
   label(){
     if (!this.cfg()) return 'Not connected';
-    if (this.state === 'busy') return '⟳ Backing up…';
+    if (this.state === 'busy') return '⟳ Syncing…';
     const last = store.get('bk-last', 0), err = store.get('bk-err', '');
-    if (this.state === 'err' || (err && store.get('bk-dirty', false))) return `<span style="color:#ff5a5a">⚠ Backup failed: ${esc(err)}</span>`;
-    return last ? `✓ Backed up ${fmtDT(last)}` : 'Waiting for first backup';
+    if (this.state === 'err' || (err && store.get('bk-dirty', false))) return `<span style="color:#ff5a5a">⚠ Sync failed: ${esc(err)}</span>`;
+    return last ? `✓ Synced ${fmtDT(last)}` : 'Waiting for first sync';
   },
-  async run(force){
+  tomb(){ return {tasks:{}, places:{}, ...(store.get('sync-tomb', null) || {})}; },
+  // read data.json from the cloud (+ its version id "sha" needed to overwrite it safely)
+  async pull(){
+    const r = await this.api('contents/data.json');
+    if (r.status === 404) return {data:null, sha:null};
+    if (!r.ok) throw new Error(`GitHub ${r.status}`);
+    const j = await r.json();
+    let text;
+    if (j.content && j.encoding === 'base64'){
+      const bin = atob(j.content.replace(/\n/g, ''));
+      text = new TextDecoder().decode(Uint8Array.from(bin, c => c.charCodeAt(0)));
+    } else {   // big files (>1 MB) come without inline content
+      const raw = await this.api('contents/data.json', {headers:{Accept:'application/vnd.github.raw+json'}});
+      if (!raw.ok) throw new Error(`GitHub ${raw.status}`);
+      text = await raw.text();
+    }
+    return {data:JSON.parse(text), sha:j.sha};
+  },
+  // merge cloud + this phone entry by entry: newer "upd" wins, deletions (tombstones) win over older edits
+  async merge(remote){
+    const tomb = this.tomb(), rt = remote?.tomb || {};
+    for (const st of ['tasks', 'places']) for (const [id, ts] of Object.entries(rt[st] || {})) tomb[st][id] = Math.max(tomb[st][id] || 0, ts);
+    const cutoff = Date.now() - 180 * 864e5;   // forget deletions older than ~6 months
+    for (const st of ['tasks', 'places']) for (const id in tomb[st]) if (tomb[st][id] < cutoff) delete tomb[st][id];
+    store.set('sync-tomb', tomb);
+    let localNewer = false, cloudApplied = false;
+    for (const st of ['tasks', 'places']){
+      const L = new Map((st === 'tasks' ? tasks : places).map(x => [x.id, x]));
+      const R = new Map((remote?.[st] || []).map(x => [x.id, x]));
+      const out = [];
+      for (const id of new Set([...L.keys(), ...R.keys()])){
+        const l = L.get(id), r = R.get(id);
+        let win = !l ? r : !r ? l : (r.upd || 0) > (l.upd || 0) ? r : l;
+        const deletedAt = tomb[st][id];   // only a REAL recorded deletion counts (entries from before sync have no timestamp)
+        if (win && deletedAt && deletedAt >= (win.upd || 0)) win = null;   // deleted after its last edit
+        if (win !== l){
+          // update the existing object IN PLACE, so screens that hold a reference keep editing the live entry
+          if (win && l){ for (const k of Object.keys(l)) delete l[k]; Object.assign(l, win); win = l; }
+          this.applying = true;
+          try { if (win) await DB.put(st, win); else await DB.del(st, id); } finally { this.applying = false; }
+          cloudApplied = true;
+        }
+        if ((win === l && l && (!r || (l.upd || 0) !== (r.upd || 0))) || (!win && r)) localNewer = true;
+        if (win) out.push(win);
+      }
+      if (st === 'tasks') tasks = out;
+      else { places = out; places.sort((a, b) => (b.hq ? 1 : 0) - (a.hq ? 1 : 0)); }
+    }
+    return {localNewer, cloudApplied};
+  },
+  async syncPhotos(){
+    const sent = new Set(store.get('bk-photos', null) || []), have = new Set(await DB.allKeys('photos'));
+    // fetch photos the other phone added
+    for (const id of new Set(tasks.flatMap(t => t.steps.map(s => s.photoId)).filter(Boolean))){
+      if (have.has(id)) continue;
+      const p = await this.api(`contents/photos/${id}.jpg`, {headers:{Accept:'application/vnd.github.raw+json'}});
+      if (p.ok){
+        this.applying = true;
+        try { await DB.put('photos', await p.blob(), id); } finally { this.applying = false; }
+        have.add(id); sent.add(id); store.set('bk-photos', [...sent]);
+      }
+    }
+    // upload this phone's new photos
+    for (const k of have){
+      if (sent.has(k)) continue;
+      const blob = await DB.get('photos', k); if (!blob) continue;
+      await this.putFile(`photos/${k}.jpg`, (await blobToDataURL(blob)).split(',')[1], 'photo');
+      sent.add(k); store.set('bk-photos', [...sent]);
+    }
+  },
+  async run(){
     if (this.busy || !this.cfg()) return;
-    if (!force && !store.get('bk-dirty', false)) return;
     if (!navigator.onLine){ this.status('err', 'offline – will retry'); return; }
     this.busy = true; this.status('busy');
     try {
-      store.set('bk-dirty', false);
-      const sent = new Set(store.get('bk-photos', []));
-      for (const k of await DB.allKeys('photos')){
-        if (sent.has(k)) continue;
-        const blob = await DB.get('photos', k); if (!blob) continue;
-        await this.putFile(`photos/${k}.jpg`, (await blobToDataURL(blob)).split(',')[1], 'photo');
-        sent.add(k); store.set('bk-photos', [...sent]);
+      for (let attempt = 0; attempt < 4; attempt++){
+        const wasDirty = store.get('bk-dirty', false);
+        store.set('bk-dirty', false);
+        const {data, sha} = await this.pull();
+        const {localNewer, cloudApplied} = await this.merge(data);
+        if (cloudApplied){ render(); if (!$('#archive').hidden) renderArchive(); }
+        await this.syncPhotos();
+        if (!wasDirty && !localNewer && sha) break;   // nothing new from this phone → no upload
+        const body = JSON.stringify({app:'zh-story', v:3, saved:Date.now(), tasks, places, tomb:this.tomb()}, null, 1);
+        const r = await this.api('contents/data.json', {method:'PUT', body:JSON.stringify({
+          message:`sync ${new Date().toISOString().slice(0, 16).replace('T', ' ')}`, content:b64utf8(body), ...(sha ? {sha} : {})})});
+        if (r.status === 409 || r.status === 422){ store.set('bk-dirty', true); continue; }   // the other phone wrote meanwhile → merge again
+        if (!r.ok) throw new Error(`GitHub ${r.status}`);
+        break;
       }
-      const data = JSON.stringify({app:'zh-story', v:2, saved:Date.now(), tasks, places}, null, 1);
-      await this.putFile('data.json', b64utf8(data), `backup ${new Date().toISOString().slice(0, 16).replace('T', ' ')}`);
       store.set('bk-last', Date.now()); store.set('bk-err', ''); this.status('ok');
     } catch (e) {
       store.set('bk-dirty', true);
@@ -1136,47 +1211,41 @@ const Backup = {
       if (!/401|403|404/.test(m)){ clearTimeout(this.timer); this.timer = setTimeout(() => this.run(), 60000); }
     } finally { this.busy = false; }
   },
-  async restore(){
-    const r = await this.api('contents/data.json', {headers:{Accept:'application/vnd.github.raw+json'}});
-    if (!r.ok) throw new Error(r.status === 404 ? 'no backup found yet' : `GitHub ${r.status}`);
-    const d = await r.json();
-    const sent = new Set(store.get('bk-photos', [])), have = new Set(await DB.allKeys('photos'));
-    const ids = (d.tasks || []).flatMap(t => t.steps.map(s => s.photoId)).filter(Boolean);
-    let n = 0;
-    for (const id of ids){
-      if (have.has(id)) continue;
-      toast(`Restoring photos… ${++n}`);
-      const p = await this.api(`contents/photos/${id}.jpg`, {headers:{Accept:'application/vnd.github.raw+json'}});
-      if (p.ok){ await DB.put('photos', await p.blob(), id); sent.add(id); }
-    }
-    store.set('bk-photos', [...sent]);
-    for (const t of d.tasks || []) await DB.put('tasks', t);
-    for (const p of d.places || []) await DB.put('places', p);
-    tasks = await DB.all('tasks'); places = await DB.all('places');
-    places.sort((a, b) => (b.hq ? 1 : 0) - (a.hq ? 1 : 0));
-    return (d.tasks || []).length;
-  },
 };
-// every change to objectives, places or photos schedules a backup
-for (const fn of ['put', 'del']){
-  const orig = DB[fn].bind(DB);
-  DB[fn] = async (...a) => { const r = await orig(...a); Backup.dirty(); return r; };
+// every local change: stamp objectives/places with "upd", remember deletions, schedule a sync
+{
+  const put = DB.put.bind(DB), del = DB.del.bind(DB);
+  DB.put = async (st, v, k) => {
+    if (!Backup.applying && (st === 'tasks' || st === 'places') && v) v.upd = Date.now();
+    const r = await put(st, v, k);
+    if (!Backup.applying) Backup.dirty();
+    return r;
+  };
+  DB.del = async (st, k) => {
+    if (!Backup.applying && (st === 'tasks' || st === 'places')){
+      const t = Backup.tomb(); t[st][k] = Date.now(); store.set('sync-tomb', t);
+    }
+    const r = await del(st, k);
+    if (!Backup.applying) Backup.dirty();
+    return r;
+  };
 }
+// pull the other phone's changes: when the app comes to the front, when back online, and every minute while open
 document.addEventListener('visibilitychange', () => { if (!document.hidden) Backup.run(); });
 window.addEventListener('online', () => Backup.run());
+setInterval(() => { if (!document.hidden) Backup.run(); }, 60000);
 
 function sheetBackup(){
   const c = Backup.cfg();
   openSheet(c ? `
-    <div class="h grad">Cloud backup</div>
-    <div class="sub">Every change is copied automatically to your private GitHub repository <b>${esc(c.repo)}</b>.</div>
+    <div class="h grad">Cloud sync</div>
+    <div class="sub">Everything syncs automatically with your private GitHub repository <b>${esc(c.repo)}</b>. Every phone connected to it sees the same objectives, places and archive.</div>
     <div class="objective" style="--c:#c0283f"><div id="bkStatus">${Backup.label()}</div></div>
-    <button class="btn primary block" id="bkNow">Back up now</button>
-    <button class="btn block" id="bkRestore">Restore from backup</button>
+    <button class="btn primary block" id="bkNow">Sync now</button>
     <button class="btn ghost danger block" id="bkOff">Disconnect</button>
     <button class="btn ghost block" id="bkBack">Back</button>` : `
-    <div class="h grad">Cloud backup</div>
-    <div class="sub">Connect a private GitHub repository once – after that everything backs up by itself.</div>
+    <div class="h grad">Cloud sync</div>
+    <div class="sub">Connect your private GitHub repository once – after that everything syncs by itself. On a second phone, use the same repository and key: it gets everything that's already there.</div>
     <label class="f">Repository</label>
     <input class="inp" id="bkRepo" value="ineinerkleinenkonditorei/zh-story-backup" autocapitalize="off" autocorrect="off" spellcheck="false">
     <label class="f">Access key (token)</label>
@@ -1197,10 +1266,11 @@ function sheetBackup(){
           if (!r.ok) throw new Error(r.status === 404 ? 'Repository not found (check name and key access)' : r.status === 401 ? 'Access key not accepted' : `GitHub ${r.status}`);
           const info = await r.json();
           if (!info.private) toast('⚠ This repository is public – make it private on GitHub!');
-          const has = (await Backup.api('contents/data.json')).ok;
-          if (has && confirm('This repository already has a backup. Restore it onto this phone first?')){ const n = await Backup.restore(); render(); toast(`Restored ${n} entries`); }
-          store.set('bk-dirty', true); Backup.run(true);
+          // first sync merges what's in the cloud with what's on this phone (nothing gets lost on either side)
+          store.set('bk-dirty', true);
           sheetBackup();
+          await Backup.run();
+          toast('Connected – synced');
         } catch (err) {
           store.set('bk-cfg', null);
           toast(String(err.message || err)); e.target.disabled = false; e.target.textContent = 'Connect';
@@ -1208,16 +1278,9 @@ function sheetBackup(){
       };
       return;
     }
-    b.querySelector('#bkNow').onclick = () => Backup.run(true);
-    b.querySelector('#bkRestore').onclick = async e => {
-      if (!confirm('Load everything from the cloud backup onto this phone? Entries on this phone are kept; matching ones are replaced by the backup version.')) return;
-      e.target.disabled = true;
-      try { const n = await Backup.restore(); render(); toast(`Restored ${n} entries`); }
-      catch (err) { toast('Restore failed: ' + (err.message || err)); }
-      e.target.disabled = false;
-    };
+    b.querySelector('#bkNow').onclick = () => { store.set('bk-dirty', true); Backup.run(); };
     b.querySelector('#bkOff').onclick = () => {
-      if (!confirm('Stop backing up? Your backup on GitHub stays where it is.')) return;
+      if (!confirm('Stop syncing on this phone? Everything stays on this phone and in the cloud.')) return;
       ['bk-cfg', 'bk-dirty', 'bk-last', 'bk-err', 'bk-photos'].forEach(k => store.set(k, null));
       sheetBackup();
     };
@@ -1235,7 +1298,7 @@ $('#btnMenu').onclick = () => {
     ${places.map(p => `<button class="list-item" data-place="${p.id}">${placeIcon(p)}<span class="t"><b>${esc(p.name)}</b><small>${esc(p.place || '')}</small></span></button>`).join('')}
     <button class="btn block" id="oAddPlace">+ Add place</button>
     <label class="f">Backup</label>
-    <button class="list-item" id="oCloud"><span class="t"><b>☁ Cloud backup</b><small id="bkStatus">${Backup.label()}</small></span></button>
+    <button class="list-item" id="oCloud"><span class="t"><b>☁ Cloud sync</b><small id="bkStatus">${Backup.label()}</small></span></button>
     <div class="sub" style="margin:10px 0 4px">Backup file (manual)</div>
     <div class="row"><button class="btn" id="oExport">Export</button><button class="btn" id="oImport">Import</button></div>
     <div class="sub" style="margin-top:18px">${active().length} active · ${done().length} passed</div>`,
@@ -1336,7 +1399,11 @@ tick(); setInterval(tick, 10000);
     await DB.open();
     tasks = await DB.all('tasks');
     places = await DB.all('places');
-    if (!placeById('hq')){ places.unshift({...HQ_DEFAULT, place:'Bodenacherstrasse 46, Benglen'}); await DB.put('places', places[0]); }
+    if (!placeById('hq')){
+      // default HQ on a fresh phone: written without a timestamp so it never overrides the real HQ from the cloud
+      places.unshift({...HQ_DEFAULT, place:'Bodenacherstrasse 46, Benglen'});
+      Backup.applying = true; try { await DB.put('places', places[0]); } finally { Backup.applying = false; }
+    }
     places.sort((a, b) => (b.hq ? 1 : 0) - (a.hq ? 1 : 0));
     if (navigator.storage && navigator.storage.persist) navigator.storage.persist();
   } catch (e) { toast('Storage unavailable — data won\'t be saved'); if (!places.length) places = [{...HQ_DEFAULT}]; }
