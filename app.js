@@ -935,27 +935,74 @@ function sheetArchiveEntry(){
   });
 }
 
+// archive view settings (remembered on this phone)
+const ARCH_SORTS = [['new', 'Newest first'], ['old', 'Oldest first'], ['az', 'Title A–Z'], ['cat', 'By category']];
+const ARCH_SHOW = [['', 'Everything'], ['star', '★ Highlights'], ['obj', 'Objectives only'], ['entry', 'Own entries only'], ['photo', 'With photo']];
+function archOpts(){ return {sort:'new', filter:'', view:'cards', ...store.get('arch', {})}; }
+
 async function renderArchive(){
-  const list = done().sort((a, b) => b.doneAt - a.doneAt);
-  const counts = {}; list.forEach(t => counts[t.cat] = (counts[t.cat] || 0) + 1);
-  let h = `<div class="stats"><div class="stat"><b>${list.length}</b><small>Objectives passed</small></div>`;
+  const o = archOpts();
+  const all = done();
+  const counts = {}; all.forEach(t => counts[t.cat] = (counts[t.cat] || 0) + 1);
+  // filter
+  let list = all.filter(t =>
+    !o.filter ? true :
+    o.filter === 'obj' ? !t.manual :
+    o.filter === 'entry' ? !!t.manual :
+    o.filter === 'photo' ? !!coverId(t) :
+    o.filter === 'star' ? !!t.star :
+    t.cat === o.filter);
+  // sort
+  const byDate = (a, b) => b.doneAt - a.doneAt;
+  list.sort(o.sort === 'old' ? (a, b) => a.doneAt - b.doneAt
+    : o.sort === 'az' ? (a, b) => a.title.localeCompare(b.title, 'de')
+    : o.sort === 'cat' ? (a, b) => Object.keys(CATS).indexOf(a.cat) - Object.keys(CATS).indexOf(b.cat) || byDate(a, b)
+    : byDate);
+
+  let h = `<div class="stats"><div class="stat"><b>${all.length}</b><small>In archive</small></div><button class="stat star-stat" id="aStars"><b>★ ${all.filter(t => t.star).length}</b><small>Highlights</small></button>`;
   for (const k in CATS) if (counts[k]) h += `<div class="stat" style="--c:${CATS[k].color}"><b>${counts[k]}</b><small>${CATS[k].name}</small></div>`;
-  h += `</div><div class="arch-list">`;
-  if (!list.length) h += `<div class="empty">Your story starts here.<br>Completed objectives appear in this archive with photos and timestamps.</div>`;
-  let month = '';
+  h += `</div>
+  <div class="arch-ctrl">
+    <select class="inp" id="aSort">${ARCH_SORTS.map(([v, l]) => `<option value="${v}" ${o.sort === v ? 'selected' : ''}>${l}</option>`).join('')}</select>
+    <select class="inp" id="aFilter">
+      ${ARCH_SHOW.map(([v, l]) => `<option value="${v}" ${o.filter === v ? 'selected' : ''}>${l}</option>`).join('')}
+      <optgroup label="Category">${Object.keys(CATS).map(k => `<option value="${k}" ${o.filter === k ? 'selected' : ''}>${CATS[k].name}</option>`).join('')}</optgroup>
+    </select>
+    <button class="icon-btn view-toggle" id="aView" aria-label="${o.view === 'list' ? 'Show as cards' : 'Show as list'}">${o.view === 'list'
+      ? '<svg viewBox="0 0 24 24"><path d="M3 3h8v8H3zm10 0h8v8h-8zM3 13h8v8H3zm10 0h8v8h-8z"/></svg>'
+      : '<svg viewBox="0 0 24 24"><path d="M3 5h18v2H3zm0 6h18v2H3zm0 6h18v2H3z"/></svg>'}</button>
+  </div>
+  <div class="arch-list ${o.view === 'list' ? 'as-list' : ''}">`;
+  if (!all.length) h += `<div class="empty">Your story starts here.<br>Completed objectives appear in this archive with photos and timestamps.</div>`;
+  else if (!list.length) h += `<div class="empty">Nothing matches this filter.</div>`;
+  let group = '';
   for (const t of list){
-    const m = new Date(t.doneAt).toLocaleDateString('en-GB', {month:'long', year:'numeric'});
-    if (m !== month){ month = m; h += `<div class="month">${m}</div>`; }
+    // section headers: month when sorted by date, category when sorted by category
+    const g = o.sort === 'cat' ? CATS[t.cat].name : o.sort === 'az' ? '' : new Date(t.doneAt).toLocaleDateString('en-GB', {month:'long', year:'numeric'});
+    if (g && g !== group){ group = g; h += `<div class="month">${g}</div>`; }
     const c = CATS[t.cat];
-    h += `<button class="arch-card" data-id="${t.id}" style="--c:${c.color}">
-      <div class="img" data-cover="${esc(coverId(t) || '')}">${coverId(t) ? '' : blip(t.cat)}</div>
-      <div class="cap"><div class="kicker">${c.name}${t.steps.length > 1 ? ` · ${t.steps.length} steps` : ''}</div><b>${esc(t.title)}</b><small>${fmtDT(t.doneAt)}</small></div>
-    </button>`;
+    if (o.view === 'list'){
+      h += `<button class="arch-row" data-id="${t.id}" style="--c:${c.color}">
+        <span class="dot"></span>
+        <span class="t"><b>${t.star ? '<i class="star">★</i> ' : ''}${esc(t.title)}</b><small>${c.name} · ${fmtDT(t.doneAt)}${t.manual ? ' · entry' : ''}</small></span>
+        ${coverId(t) ? '<span class="cam">📷</span>' : ''}
+      </button>`;
+    } else {
+      h += `<button class="arch-card" data-id="${t.id}" style="--c:${c.color}">
+        <div class="img" data-cover="${esc(coverId(t) || '')}">${coverId(t) ? '' : blip(t.cat)}</div>
+        <div class="cap"><div class="kicker">${c.name}${t.steps.length > 1 ? ` · ${t.steps.length} steps` : ''}</div><b>${t.star ? '<i class="star">★</i> ' : ''}${esc(t.title)}</b><small>${fmtDT(t.doneAt)}</small></div>
+      </button>`;
+    }
   }
   h += `</div>`;
   const body = $('#archBody');
   body.innerHTML = h;
-  body.querySelectorAll('.arch-card').forEach(el => el.onclick = () => renderArchiveDetail(el.dataset.id));
+  const set = patch => { store.set('arch', {...archOpts(), ...patch}); renderArchive(); };
+  body.querySelector('#aSort').onchange = e => set({sort:e.target.value});
+  body.querySelector('#aFilter').onchange = e => set({filter:e.target.value});
+  body.querySelector('#aView').onclick = () => set({view:o.view === 'list' ? 'cards' : 'list'});
+  body.querySelector('#aStars').onclick = () => set({filter:o.filter === 'star' ? '' : 'star'});
+  body.querySelectorAll('.arch-card,.arch-row').forEach(el => el.onclick = () => renderArchiveDetail(el.dataset.id));
   for (const el of body.querySelectorAll('[data-cover]')){
     const u = await photoUrl(el.dataset.cover);
     if (u) el.style.backgroundImage = `url(${u})`;
@@ -986,11 +1033,20 @@ async function renderArchiveDetail(id){
       ${u ? `<img src="${u}" alt="">` : ''}
     </div>`;
   }
+  h += `<button class="btn block star-btn ${t.star ? 'on' : ''}" id="adStar">${t.star ? '★ Highlighted' : '☆ Highlight'}</button>`;
   h += `<button class="btn block" id="adBack">Back to archive</button>
         <button class="btn ghost danger block" id="adDel">Delete from archive</button></div>`;
   $('#archBody').innerHTML = h;
   $('#archive').scrollTop = 0;
   $('#adBack').onclick = renderArchive;
+  $('#adStar').onclick = async () => {
+    if (t.star) delete t.star; else t.star = true;
+    await saveTask(t);
+    const b = $('#adStar');
+    b.classList.toggle('on', !!t.star);
+    b.textContent = t.star ? '★ Highlighted' : '☆ Highlight';
+    if (t.star) toast('Added to highlights');
+  };
   $('#adDel').onclick = async () => {
     if (!confirm(`Delete "${t.title}" and its photos permanently?`)) return;
     await deleteTask(t); renderArchive();

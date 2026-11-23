@@ -272,3 +272,21 @@ label.f{display:block;font-size:11px;font-weight:800;letter-spacing:1.5px;text-t
 /* selected category in the archive entry sheet */
 .catgrid .cat.on{border-color:#ff5a72;box-shadow:0 0 18px rgba(192,40,63,.9),inset 0 0 10px rgba(192,40,63,.5)}
 .catgrid .cat:not(.on){opacity:.85}
+
+/* archive controls + text list view */
+.arch-ctrl{display:flex;gap:8px;padding:0 14px 14px;align-items:center}
+.arch-ctrl select.inp{flex:1;min-width:0;padding:10px 12px;font-size:14px}
+.arch-ctrl .view-toggle{flex:none;border-radius:0}
+.arch-list.as-list{gap:0}
+.arch-row{display:flex;align-items:center;gap:12px;width:100%;padding:11px 2px;border-bottom:1px solid var(--line);text-align:left}
+.arch-row .dot{flex:none;width:10px;height:10px;border-radius:50%;background:var(--c);box-shadow:0 0 6px var(--c)}
+.arch-row .t{flex:1;min-width:0}
+.arch-row b{display:block;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.arch-row small{display:block;color:var(--muted);font-size:12px;margin-top:2px}
+.arch-row .cam{flex:none;font-size:13px;opacity:.7}
+
+/* highlights */
+i.star{font-style:normal;color:#ffd400;text-shadow:0 0 8px rgba(255,212,0,.7)}
+.star-stat{text-align:left}
+.star-stat b{color:#ffd400!important;text-shadow:0 0 10px rgba(255,212,0,.5)}
+.star-btn.on{color:#ffd400;border-color:#ffd400;box-shadow:0 0 14px rgba(255,212,0,.35)}
