@@ -347,3 +347,5 @@ i.star{font-style:normal;color:#ffd400;text-shadow:0 0 8px rgba(255,212,0,.7)}
   -webkit-mask-image:radial-gradient(ellipse 72% 62% at 50% 50%,transparent 45%,rgba(0,0,0,.6) 75%,#000 100%);
           mask-image:radial-gradient(ellipse 72% 62% at 50% 50%,transparent 45%,rgba(0,0,0,.6) 75%,#000 100%);
   background:radial-gradient(ellipse 72% 62% at 50% 50%,transparent 50%,rgba(0,0,0,.35) 80%,rgba(0,0,0,.7) 100%)}
+/* sidebar: unselected icons slightly dimmer than the selected one */
+.mode:not(.on){opacity:.78}
