@@ -1,7 +1,7 @@
 {
   "name": "ZH Story",
   "short_name": "ZH Story",
-  "description": "Personal mission map for Kanton Zürich",
+  "description": "Personal objective map for Kanton Zürich",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

@@ -1,4 +1,4 @@
-/* ZH Story — personal mission map for Kanton Zürich */
+/* ZH Story — personal objective map for Kanton Zürich */
 'use strict';
 
 /* ---------------- Categories ---------------- */
@@ -310,7 +310,7 @@ let draft = null;
 $('#btnAdd').addEventListener('click', () => sheetCategory());
 
 function sheetCategory(){
-  let h = `<div class="h grad">New Mission</div><div class="sub">Choose a category</div><div class="catgrid">`;
+  let h = `<div class="h grad">New Objective</div><div class="sub">Choose a category</div><div class="catgrid">`;
   for (const k in CATS) h += `<button class="cat" data-k="${k}" style="--c:${CATS[k].color}"><span class="ic">${CATS[k].icon}</span><span><b>${CATS[k].name}</b><small>${CATS[k].hint}</small></span></button>`;
   h += `</div>`;
   openSheet(h, b => b.querySelectorAll('.cat').forEach(btn => btn.onclick = () => {
@@ -323,12 +323,12 @@ function sheetDetails(){
   const c = CATS[draft.cat];
   openSheet(`
     <div class="kicker" style="--c:${c.color}">${c.name}</div>
-    <div class="h">Mission details</div>
+    <div class="h">Objective details</div>
     <label class="f">Title</label>
     <input class="inp" id="dTitle" maxlength="80" placeholder="e.g. Get my driver's licence" value="${esc(draft.title)}">
     <label class="f">Description</label>
     <textarea class="inp" id="dDesc" rows="3" placeholder="What's it about? Notes, details…">${esc(draft.desc)}</textarea>
-    <label class="toggle"><span><b>Multi-step mission</b><br><small style="color:var(--muted)">Next step appears when one is done</small></span><input type="checkbox" id="dMulti" ${draft.multi ? 'checked' : ''}></label>
+    <label class="toggle"><span><b>Multi-step objective</b><br><small style="color:var(--muted)">Next step appears when one is done</small></span><input type="checkbox" id="dMulti" ${draft.multi ? 'checked' : ''}></label>
     <button class="btn primary block" id="dNext">Next · Set place</button>
     <button class="btn ghost block" id="dBack">Back</button>`,
   b => {
@@ -369,7 +369,7 @@ function sheetSteps(){
     <div class="sub">Each step has its own place. Only the current one shows on the map.</div>
     <div class="steps">${items || '<div class="empty">No steps yet</div>'}</div>
     <button class="btn block" id="sAdd">+ Add step</button>
-    <button class="btn primary block" id="sGo" ${ready ? '' : 'disabled'}>Start mission</button>
+    <button class="btn primary block" id="sGo" ${ready ? '' : 'disabled'}>Start objective</button>
     <button class="btn ghost block" id="sBack">Back</button>`,
   b => {
     b.querySelector('#sAdd').onclick = () => sheetStepEdit(draft.steps.length);
@@ -386,7 +386,7 @@ function sheetStepEdit(i){
   openSheet(`
     <div class="kicker" style="--c:${c.color}">Step ${i + 1}</div>
     <div class="h">${draft.steps[i] ? 'Edit step' : 'New step'}</div>
-    <label class="f">Objective</label>
+    <label class="f">Step</label>
     <input class="inp" id="eTitle" maxlength="80" placeholder="e.g. Book theory exam" value="${esc(s.title)}">
     <label class="f">Details (optional)</label>
     <textarea class="inp" id="eDesc" rows="2">${esc(s.desc)}</textarea>
@@ -414,7 +414,7 @@ async function finishDraft(){
   render();
   const s = t.steps[0];
   map.flyTo([s.lat, s.lng], Math.max(map.getZoom(), 14), {duration:.8});
-  banner(CATS[t.cat].name, 'New Mission', t.title, CATS[t.cat].color);
+  banner(CATS[t.cat].name, 'New Objective', t.title, CATS[t.cat].color);
 }
 
 /* ---------------- Place picker ---------------- */
@@ -534,25 +534,25 @@ function openMission(id){
     <div class="meta"><span class="chip">Started ${fmtDate(t.created)}</span>${meLatLng ? `<span class="chip">${distTo(s)} away</span>` : ''}</div>
     ${t.desc ? `<div class="desc">${esc(t.desc)}</div>` : ''}
     <div class="objective" style="--c:${c.color}">
-      <div class="kicker">Current objective</div>
+      <div class="kicker">Current step</div>
       <b>${esc(s.title)}</b>
       ${s.desc ? `<div class="desc" style="margin-top:4px">${esc(s.desc)}</div>` : ''}
       <div style="color:var(--muted);font-size:12px;margin-top:6px">📍 ${esc(s.place || '')}</div>
     </div>
     ${stepsHtml}
-    <button class="btn primary block" id="mDone">${multi && t.cur < t.steps.length - 1 ? 'Complete objective' : 'Complete mission'}</button>
+    <button class="btn primary block" id="mDone">${multi && t.cur < t.steps.length - 1 ? 'Complete step' : 'Complete objective'}</button>
     <div class="row" style="margin-top:10px">
       <button class="btn" id="mNav">Navigate</button>
       <button class="btn" id="mEdit">Edit</button>
     </div>
-    <button class="btn ghost danger block" id="mDel">Abandon mission</button>`,
+    <button class="btn ghost danger block" id="mDel">Abandon objective</button>`,
   b => {
     b.querySelector('#mDone').onclick = () => sheetComplete(t);
     b.querySelector('#mNav').onclick = () => window.open(`https://maps.apple.com/?daddr=${s.lat},${s.lng}`, '_blank');
     b.querySelector('#mEdit').onclick = () => sheetEdit(t);
     b.querySelector('#mDel').onclick = async () => {
       if (!confirm(`Abandon "${t.title}"? It will be deleted.`)) return;
-      await deleteTask(t); closeSheet(); render(); toast('Mission abandoned');
+      await deleteTask(t); closeSheet(); render(); toast('Objective abandoned');
     };
   });
   map.flyTo([s.lat, s.lng], Math.max(map.getZoom(), 14), {duration:.6});
@@ -570,11 +570,11 @@ async function deleteTask(t){
 function sheetEdit(t){
   const c = CATS[t.cat], s = t.steps[t.cur];
   openSheet(`
-    <div class="kicker" style="--c:${c.color}">${c.name}</div><div class="h">Edit mission</div>
+    <div class="kicker" style="--c:${c.color}">${c.name}</div><div class="h">Edit objective</div>
     <label class="f">Title</label><input class="inp" id="xTitle" maxlength="80" value="${esc(t.title)}">
     <label class="f">Description</label><textarea class="inp" id="xDesc" rows="3">${esc(t.desc)}</textarea>
-    <label class="f">Current objective</label><input class="inp" id="xStep" maxlength="80" value="${esc(s.title)}">
-    <button class="btn block" id="xMove">📍 Move current objective</button>
+    <label class="f">Current step</label><input class="inp" id="xStep" maxlength="80" value="${esc(s.title)}">
+    <button class="btn block" id="xMove">📍 Move current step</button>
     <button class="btn block" id="xAdd">+ Add a step at the end</button>
     <button class="btn primary block" id="xSave">Save</button>
     <button class="btn ghost block" id="xBack">Back</button>`,
@@ -596,7 +596,7 @@ function sheetAddStep(t){
   const c = CATS[t.cat];
   openSheet(`
     <div class="kicker" style="--c:${c.color}">Step ${t.steps.length + 1}</div><div class="h">New step</div>
-    <label class="f">Objective</label><input class="inp" id="aTitle" maxlength="80">
+    <label class="f">Step</label><input class="inp" id="aTitle" maxlength="80">
     <label class="f">Details (optional)</label><textarea class="inp" id="aDesc" rows="2"></textarea>
     <button class="btn primary block" id="aNext" disabled>Set place</button>
     <button class="btn ghost block" id="aBack">Back</button>`,
@@ -622,13 +622,13 @@ function sheetComplete(t){
   const last = t.cur >= t.steps.length - 1;
   pendingPhoto = null;
   openSheet(`
-    <div class="kicker" style="--c:${c.color}">${last ? 'Mission complete' : 'Objective complete'}</div>
+    <div class="kicker" style="--c:${c.color}">${last ? 'Objective complete' : 'Step complete'}</div>
     <div class="h">${esc(s.title)}</div>
     <div class="sub">Capture the moment for your story archive.</div>
     <button class="photo-prev" id="cPhoto">📷 Tap to take a photo</button>
     <label class="f">Note (optional)</label>
     <textarea class="inp" id="cNote" rows="2" placeholder="How did it go?"></textarea>
-    <button class="btn primary block" id="cSave">${last ? 'Mission passed' : 'Done · Next objective'}</button>
+    <button class="btn primary block" id="cSave">${last ? 'Objective passed' : 'Done · Next step'}</button>
     <button class="btn ghost block" id="cBack">Back</button>`,
   b => {
     const prev = b.querySelector('#cPhoto');
@@ -676,17 +676,17 @@ async function completeStep(t, note, photo){
     t.status = 'done'; t.doneAt = s.doneAt;
     await saveTask(t);
     selectedId = null; closeSheet(); render();
-    banner(c.name, 'Mission Passed', t.title, c.color);
+    banner(c.name, 'Objective Passed', t.title, c.color);
   } else {
     await saveTask(t);
     selectedId = null; closeSheet(); render();
     const n = t.steps[t.cur];
-    banner(`Step ${t.cur} of ${t.steps.length} complete`, 'New Objective', n.title, c.color);
+    banner(`Step ${t.cur} of ${t.steps.length} complete`, 'Next Step', n.title, c.color);
     setTimeout(() => map.flyTo([n.lat, n.lng], Math.max(map.getZoom(), 14), {duration:1}), 600);
   }
 }
 
-/* ---------------- Mission list ---------------- */
+/* ---------------- Objective list ---------------- */
 $('#btnList').onclick = () => {
   const list = visible().sort((a, b) => (a.cat === 'story' ? -1 : 0) - (b.cat === 'story' ? -1 : 0) || a.created - b.created);
   openSheet(`
@@ -695,7 +695,7 @@ $('#btnList').onclick = () => {
     ${list.length ? list.map(t => { const s = t.steps[t.cur]; return `
       <button class="list-item" data-id="${t.id}">${blip(t.cat)}
         <span class="t"><b>${esc(t.title)}</b><small>${t.steps.length > 1 ? `${t.cur + 1}/${t.steps.length} · ${esc(s.title)}` : esc(s.place || '')}${meLatLng ? ' · ' + distTo(s) : ''}</small></span>
-      </button>`; }).join('') : '<div class="empty">No active missions. Tap + to add one.</div>'}`,
+      </button>`; }).join('') : '<div class="empty">No active objectives. Tap + to add one.</div>'}`,
   b => b.querySelectorAll('.list-item').forEach(el => el.onclick = () => openMission(el.dataset.id)));
 };
 
@@ -706,10 +706,10 @@ $('#archClose').onclick = () => { $('#archive').hidden = true; };
 async function renderArchive(){
   const list = done().sort((a, b) => b.doneAt - a.doneAt);
   const counts = {}; list.forEach(t => counts[t.cat] = (counts[t.cat] || 0) + 1);
-  let h = `<div class="stats"><div class="stat"><b>${list.length}</b><small>Missions passed</small></div>`;
+  let h = `<div class="stats"><div class="stat"><b>${list.length}</b><small>Objectives passed</small></div>`;
   for (const k in CATS) if (counts[k]) h += `<div class="stat" style="--c:${CATS[k].color}"><b>${counts[k]}</b><small>${CATS[k].name}</small></div>`;
   h += `</div><div class="arch-list">`;
-  if (!list.length) h += `<div class="empty">Your story starts here.<br>Completed missions appear in this archive with photos and timestamps.</div>`;
+  if (!list.length) h += `<div class="empty">Your story starts here.<br>Completed objectives appear in this archive with photos and timestamps.</div>`;
   let month = '';
   for (const t of list){
     const m = new Date(t.doneAt).toLocaleDateString('en-GB', {month:'long', year:'numeric'});
@@ -737,7 +737,7 @@ async function renderArchiveDetail(id){
   const c = CATS[t.cat];
   const cover = await photoUrl(coverId(t));
   let h = `<div class="hero" style="${cover ? `background-image:url(${cover})` : ''}"><div class="cap" style="--c:${c.color}">
-      <div class="kicker">${c.name} · Mission passed</div><div class="h">${esc(t.title)}</div></div></div>
+      <div class="kicker">${c.name} · Objective passed</div><div class="h">${esc(t.title)}</div></div></div>
     <div class="timeline">
       <div class="meta" style="margin-top:-6px"><span class="chip">Started ${fmtDT(t.created)}</span><span class="chip">Passed ${fmtDT(t.doneAt)}</span><span class="chip">⏱ ${fmtDur(t.doneAt - t.created)}</span></div>
       ${t.desc ? `<div class="desc" style="margin-bottom:18px">${esc(t.desc)}</div>` : ''}`;
@@ -855,7 +855,7 @@ $('#importInput').onchange = async e => {
     for (const p of d.places || []) await DB.put('places', p);
     tasks = await DB.all('tasks');
     places = await DB.all('places');
-    closeSheet(); render(); toast(`Imported ${d.tasks.length} missions`);
+    closeSheet(); render(); toast(`Imported ${d.tasks.length} objectives`);
   } catch { toast('That file is not a ZH Story backup'); }
 };
 
