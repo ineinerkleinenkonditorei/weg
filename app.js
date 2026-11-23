@@ -206,7 +206,9 @@ const markers = L.layerGroup().addTo(map);
 let meMarker = null;
 
 function taskMarker(t, ll, z = 0){
-  const badge = t.steps.length > 1 ? `<span class="stp">${t.cur + 1}/${t.steps.length}</span>` : '';
+  const ds = dueState(t);
+  const clock = ds ? `<span class="clk ${ds}"><svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 1 0 20 10 10 0 0 1 0-20zm0 3a7 7 0 1 0 0 14 7 7 0 0 0 0-14zm-1 2h2v4.6l3.2 2-1 1.7L11 12.7z"/></svg></span>` : '';
+  const badge = (t.steps.length > 1 ? `<span class="stp">${t.cur + 1}/${t.steps.length}</span>` : '') + clock;
   const icon = L.divIcon({className:'blip-wrap', html:blip(t.cat, t.id === selectedId ? 'sel' : '', badge), iconSize:[34, 34], iconAnchor:[17, 17]});
   return L.marker(ll, {icon, zIndexOffset:z + (t.cat === 'story' ? 500 : 0)}).on('click', () => openMission(t.id));
 }
@@ -345,6 +347,79 @@ function sheetCategory(){
   }));
 }
 
+/* ---------------- Fixed time, alerts, iPhone calendar ---------------- */
+const ALERT_OPTS = [[-1, 'No alert'], [0, 'At time'], [15, '15 min before'], [60, '1 hour before'], [180, '3 hours before'], [1440, '1 day before'], [2880, '2 days before'], [10080, '1 week before']];
+const DEFAULT_ALERTS = [60, 1440];
+function toLocalInput(ms){ const d = new Date(ms); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16); }
+function defaultDue(){ const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(9, 0, 0, 0); return d.getTime(); }
+function dueLabel(ms){
+  const now = Date.now(), diff = ms - now, min = Math.round(Math.abs(diff) / 60000);
+  const span = min < 60 ? `${min} min` : min < 1440 ? `${Math.round(min / 60)} h` : `${Math.round(min / 1440)} days`;
+  if (diff < 0) return `overdue ${span}`;
+  const d = new Date(ms), today = new Date(), tom = new Date(); tom.setDate(tom.getDate() + 1);
+  const hm = fmtTime(ms);
+  if (d.toDateString() === today.toDateString()) return `today ${hm} · in ${span}`;
+  if (d.toDateString() === tom.toDateString()) return `tomorrow ${hm}`;
+  return `${d.toLocaleDateString('en-GB', {weekday:'short', day:'numeric', month:'short'})} ${hm} · in ${span}`;
+}
+const dueState = t => !t.due ? '' : t.due < Date.now() ? 'over' : t.due - Date.now() < 864e5 ? 'soon' : 'later';
+const alertText = t => (t.alerts || []).map(m => ALERT_OPTS.find(o => o[0] === m)?.[1]).filter(Boolean).join(' + ') || 'no alerts';
+
+function timeFields(o){
+  const opt = sel => ALERT_OPTS.map(([v, l]) => `<option value="${v}" ${v === sel ? 'selected' : ''}>${l}</option>`).join('');
+  const a = o.alerts || DEFAULT_ALERTS;
+  return `
+    <label class="toggle"><span><b>Fixed date &amp; time</b></span><input type="checkbox" id="tOn" ${o.due ? 'checked' : ''}></label>
+    <div id="tBox" ${o.due ? '' : 'hidden'}>
+      <label class="f">When</label>
+      <input class="inp" type="datetime-local" id="tWhen" value="${toLocalInput(o.due || defaultDue())}">
+      <label class="f">Calendar alerts</label>
+      <div class="row"><select class="inp" id="tA1">${opt(a[0] ?? -1)}</select><select class="inp" id="tA2">${opt(a[1] ?? -1)}</select></div>
+    </div>`;
+}
+// wires the fields up and returns a function that writes them into the object
+function bindTime(b, o){
+  const on = b.querySelector('#tOn'), box = b.querySelector('#tBox');
+  on.onchange = () => box.hidden = !on.checked;
+  return () => {
+    const ms = new Date(b.querySelector('#tWhen').value).getTime();
+    if (on.checked && ms){
+      o.due = ms;
+      o.alerts = [...new Set([+b.querySelector('#tA1').value, +b.querySelector('#tA2').value])].filter(v => v >= 0).sort((x, y) => x - y);
+    } else { delete o.due; delete o.alerts; }
+  };
+}
+
+function icsFor(t){
+  const f = ms => new Date(ms).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+  const e = x => String(x || '').replace(/\\/g, '\\\\').replace(/\r?\n/g, '\\n').replace(/[,;]/g, m => '\\' + m);
+  const s = t.steps[t.cur] || t.steps[0];
+  const alarms = (t.alerts || []).flatMap(m => ['BEGIN:VALARM', 'ACTION:DISPLAY', `DESCRIPTION:${e(t.title)}`, `TRIGGER:-PT${m}M`, 'END:VALARM']);
+  return ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//ZH Story//EN', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', 'BEGIN:VEVENT',
+    `UID:${t.id}@zh-story`, `DTSTAMP:${f(Date.now())}`, `DTSTART:${f(t.due)}`, `DTEND:${f(t.due + 36e5)}`,
+    `SUMMARY:${e(t.title)}`, `LOCATION:${e(s.place)}`, `DESCRIPTION:${e([CATS[t.cat].name, t.desc].filter(Boolean).join(' – '))}`,
+    ...alarms, 'END:VEVENT', 'END:VCALENDAR'].join('\r\n');
+}
+function addToCalendar(t){
+  const name = (t.title.replace(/[^\w\- ]+/g, '').trim() || 'objective') + '.ics';
+  const url = URL.createObjectURL(new Blob([icsFor(t)], {type:'text/calendar'}));
+  const a = document.createElement('a'); a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+function offerCalendar(t, back){
+  openSheet(`
+    <div class="kicker" style="--c:${CATS[t.cat].color}">Reminder</div>
+    <div class="h">Add to iPhone calendar?</div>
+    <div class="sub">${esc(t.title)}<br>⏰ ${dueLabel(t.due)} · ${alertText(t)}</div>
+    <button class="btn primary block" id="calGo">📅 Add to calendar</button>
+    <button class="btn ghost block" id="calNo">${back ? 'Back' : 'Not now'}</button>`,
+  b => {
+    b.querySelector('#calGo').onclick = () => { addToCalendar(t); back ? back() : closeSheet(); };
+    b.querySelector('#calNo').onclick = () => back ? back() : closeSheet();
+  });
+}
+
 function sheetDetails(){
   const c = CATS[draft.cat];
   openSheet(`
@@ -355,10 +430,14 @@ function sheetDetails(){
     <label class="f">Description</label>
     <textarea class="inp" id="dDesc" rows="3" placeholder="What's it about? Notes, details…">${esc(draft.desc)}</textarea>
     <label class="toggle"><span><b>Multi-step objective</b><br><small style="color:var(--muted)">Next step appears when one is done</small></span><input type="checkbox" id="dMulti" ${draft.multi ? 'checked' : ''}></label>
+    ${timeFields(draft)}
     <button class="btn primary block" id="dNext">Next · Set place</button>
     <button class="btn ghost block" id="dBack">Back</button>`,
   b => {
     const title = b.querySelector('#dTitle'), multi = b.querySelector('#dMulti'), next = b.querySelector('#dNext');
+    const readTime = bindTime(b, draft);
+    b.querySelector('#dBack').addEventListener('click', readTime);
+    next.addEventListener('click', readTime);
     const upd = () => { next.disabled = !title.value.trim(); next.textContent = multi.checked ? 'Next · Add steps' : 'Next · Set place'; };
     title.oninput = upd; multi.onchange = upd; upd();
     setTimeout(() => title.focus(), 300);
@@ -441,6 +520,7 @@ async function finishDraft(){
   const s = t.steps[0];
   map.flyTo([s.lat, s.lng], Math.max(map.getZoom(), 14), {duration:.8});
   banner(CATS[t.cat].name, 'New Objective', t.title, CATS[t.cat].color);
+  if (t.due) setTimeout(() => offerCalendar(t), 900);
 }
 
 /* ---------------- Place picker ---------------- */
@@ -557,7 +637,7 @@ function openMission(id){
       </div>`).join('') + `</div>` : '';
   openSheet(`
     <div class="mission-head">${blip(t.cat, 'big')}<div><div class="kicker" style="--c:${c.color}">${c.name}${multi ? ` · Step ${t.cur + 1} of ${t.steps.length}` : ''}</div><div class="h">${esc(t.title)}</div></div></div>
-    <div class="meta"><span class="chip">Started ${fmtDate(t.created)}</span>${meLatLng ? `<span class="chip">${distTo(s)} away</span>` : ''}</div>
+    <div class="meta">${t.due ? `<span class="chip due-${dueState(t)}">⏰ ${dueLabel(t.due)}</span>` : ''}<span class="chip">Started ${fmtDate(t.created)}</span>${meLatLng ? `<span class="chip">${distTo(s)} away</span>` : ''}</div>
     ${t.desc ? `<div class="desc">${esc(t.desc)}</div>` : ''}
     <div class="objective" style="--c:${c.color}">
       <div class="kicker">Current step</div>
@@ -571,8 +651,10 @@ function openMission(id){
       <button class="btn" id="mNav">Navigate</button>
       <button class="btn" id="mEdit">Edit</button>
     </div>
+    ${t.due ? '<button class="btn block" id="mCal">📅 Add to calendar</button>' : ''}
     <button class="btn ghost danger block" id="mDel">Abandon objective</button>`,
   b => {
+    const cal = b.querySelector('#mCal'); if (cal) cal.onclick = () => addToCalendar(t);
     b.querySelector('#mDone').onclick = () => sheetComplete(t);
     b.querySelector('#mNav').onclick = () => window.open(`https://maps.apple.com/?daddr=${s.lat},${s.lng}`, '_blank');
     b.querySelector('#mEdit').onclick = () => sheetEdit(t);
@@ -600,19 +682,27 @@ function sheetEdit(t){
     <label class="f">Title</label><input class="inp" id="xTitle" maxlength="80" value="${esc(t.title)}">
     <label class="f">Description</label><textarea class="inp" id="xDesc" rows="3">${esc(t.desc)}</textarea>
     <label class="f">Current step</label><input class="inp" id="xStep" maxlength="80" value="${esc(s.title)}">
+    ${timeFields(t)}
     <button class="btn block" id="xMove">📍 Move current step</button>
     <button class="btn block" id="xAdd">+ Add a step at the end</button>
     <button class="btn primary block" id="xSave">Save</button>
     <button class="btn ghost block" id="xBack">Back</button>`,
   b => {
+    const readTime = bindTime(b, t), oldDue = t.due, oldAlerts = String(t.alerts);
     const commit = async () => {
+      readTime();
       t.title = b.querySelector('#xTitle').value.trim() || t.title;
       t.desc = b.querySelector('#xDesc').value.trim();
       s.title = b.querySelector('#xStep').value.trim() || s.title;
       if (t.steps.length === 1) s.title = t.title;
       await saveTask(t);
     };
-    b.querySelector('#xSave').onclick = async () => { await commit(); render(); openMission(t.id); };
+    b.querySelector('#xSave').onclick = async () => {
+      await commit(); render();
+      // time changed → offer to put the new time in the calendar
+      if (t.due && (t.due !== oldDue || String(t.alerts) !== oldAlerts)) offerCalendar(t, () => openMission(t.id));
+      else openMission(t.id);
+    };
     b.querySelector('#xBack').onclick = () => openMission(t.id);
     b.querySelector('#xMove').onclick = async () => { await commit(); startPick(t.cat, s, async ok => { if (ok) await saveTask(t); render(); openMission(t.id); }); };
     b.querySelector('#xAdd').onclick = async () => { await commit(); sheetAddStep(t); };
@@ -714,13 +804,14 @@ async function completeStep(t, note, photo){
 
 /* ---------------- Objective list ---------------- */
 $('#btnList').onclick = () => {
-  const list = visible().sort((a, b) => (a.cat === 'story' ? -1 : 0) - (b.cat === 'story' ? -1 : 0) || a.created - b.created);
+  // timed objectives first (soonest / overdue on top), then story, then oldest
+  const list = visible().sort((a, b) => (a.due || Infinity) - (b.due || Infinity) || (a.cat === 'story' ? -1 : 0) - (b.cat === 'story' ? -1 : 0) || a.created - b.created);
   openSheet(`
     <div class="h grad">${mode === 'all' ? 'All' : CATS[mode].name}</div>
     <div class="sub">${list.length} active</div>
     ${list.length ? list.map(t => { const s = t.steps[t.cur]; return `
       <button class="list-item" data-id="${t.id}">${blip(t.cat)}
-        <span class="t"><b>${esc(t.title)}</b><small>${t.steps.length > 1 ? `${t.cur + 1}/${t.steps.length} · ${esc(s.title)}` : esc(s.place || '')}${meLatLng ? ' · ' + distTo(s) : ''}</small></span>
+        <span class="t"><b>${esc(t.title)}</b>${t.due ? `<small class="due-${dueState(t)}">⏰ ${dueLabel(t.due)}</small>` : ''}<small>${t.steps.length > 1 ? `${t.cur + 1}/${t.steps.length} · ${esc(s.title)}` : esc(s.place || '')}${meLatLng ? ' · ' + distTo(s) : ''}</small></span>
       </button>`; }).join('') : '<div class="empty">No active objectives. Tap + to add one.</div>'}`,
   b => b.querySelectorAll('.list-item').forEach(el => el.onclick = () => openMission(el.dataset.id)));
 };
@@ -906,5 +997,10 @@ tick(); setInterval(tick, 10000);
   map.setView([hq().lat, hq().lng], START_ZOOM);
   if (mode !== 'all' && !CATS[mode]) mode = 'all';
   render();
+  const over = active().filter(t => dueState(t) === 'over').length;
+  const today = active().filter(t => t.due && t.due >= Date.now() && new Date(t.due).toDateString() === new Date().toDateString()).length;
+  if (over || today) setTimeout(() => toast([over && `${over} overdue`, today && `${today} due today`].filter(Boolean).join(' · ')), 800);
+  // refresh countdowns / clock colours every minute
+  setInterval(() => { if (active().some(t => t.due) && !pickCb && !sheet.classList.contains('open')) render(); }, 60000);
 })();
 if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js');

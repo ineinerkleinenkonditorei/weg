@@ -89,6 +89,17 @@ body[data-layer=sat] .base-tiles{filter:grayscale(.7) brightness(.38) contrast(1
 .blip.big svg{width:26px;height:26px}
 @keyframes pulse{0%{transform:scale(.7);opacity:1}100%{transform:scale(1.6);opacity:0}}
 .zh-line{stroke:url(#zhGrad)}
+/* timed objectives */
+.blip .clk{position:absolute;top:-7px;left:-7px;width:17px;height:17px;border-radius:50%;background:#000;color:#fff;border:1.5px solid #fff;display:flex;align-items:center;justify-content:center}
+.blip .clk svg{width:11px;height:11px;display:block}
+.blip .clk.soon{color:var(--orange);border-color:var(--orange);box-shadow:0 0 6px var(--orange)}
+.blip .clk.over{color:#ff3b30;border-color:#ff3b30;box-shadow:0 0 8px #ff3b30;animation:clkPulse 1.2s infinite}
+@keyframes clkPulse{50%{box-shadow:0 0 2px #ff3b30}}
+.chip.due-soon,small.due-soon{color:var(--orange)!important;border-color:var(--orange)}
+.chip.due-over,small.due-over{color:#ff5a5a!important;border-color:#ff3b30}
+select.inp{-webkit-appearance:none;appearance:none;color:var(--text);background-color:#0d0d0d}
+select.inp option{background:#0d0d0d;color:#fff}
+input[type=datetime-local].inp{min-height:48px;color-scheme:dark}
 /* fixed places: neon icons with a glow */
 .place{position:relative;width:40px;height:40px;border-radius:50%;background:#050505;color:var(--c);display:flex;align-items:center;justify-content:center;
   border:2.5px solid var(--c);box-shadow:0 0 10px var(--c),0 0 22px color-mix(in srgb,var(--c) 55%,transparent),inset 0 0 8px color-mix(in srgb,var(--c) 40%,transparent)}
@@ -247,3 +258,8 @@ label.f{display:block;font-size:11px;font-weight:800;letter-spacing:1.5px;text-t
 .stat,.arch-card,.hero,#toast,.pick-opt,.pchip,.tl img,.list-item{border-radius:0!important}
 .cat{justify-content:flex-start;min-height:64px}
 .cat b{font-size:15px}
+
+/* category picker only: rounded, tight boxes that hug icon + name */
+.catgrid{display:flex!important;flex-wrap:wrap;gap:8px}
+.catgrid .cat{border-radius:14px!important;width:auto;min-height:0;padding:6px 14px 6px 6px;gap:9px}
+.catgrid .cat .ic{width:34px;height:34px}
