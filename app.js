@@ -123,7 +123,9 @@ async function photoUrl(id){
   photoUrls.set(id, u);
   return u;
 }
-const active = () => tasks.filter(t => t.status === 'active');
+// active = on the map right now; waiting = recurring objectives outside their window
+const active = () => tasks.filter(t => t.status === 'active' && isShown(t));
+const waiting = () => tasks.filter(t => t.status === 'active' && !isShown(t));
 const done = () => tasks.filter(t => t.status === 'done');
 const visible = () => active().filter(t => mode === 'all' || t.cat === mode);
 async function saveTask(t){ await DB.put('tasks', t); }
@@ -354,6 +356,7 @@ function toLocalInput(ms){ const d = new Date(ms); d.setMinutes(d.getMinutes() -
 function defaultDue(){ const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(9, 0, 0, 0); return d.getTime(); }
 function dueLabel(ms){
   const now = Date.now(), diff = ms - now, min = Math.round(Math.abs(diff) / 60000);
+  if (min < 1) return 'due now';
   const span = min < 60 ? `${min} min` : min < 1440 ? `${Math.round(min / 60)} h` : `${Math.round(min / 1440)} days`;
   if (diff < 0) return `overdue ${span}`;
   const d = new Date(ms), today = new Date(), tom = new Date(); tom.setDate(tom.getDate() + 1);
@@ -365,9 +368,48 @@ function dueLabel(ms){
 const dueState = t => !t.due ? '' : t.due < Date.now() ? 'over' : t.due - Date.now() < 864e5 ? 'soon' : 'later';
 const alertText = t => (t.alerts || []).map(m => ALERT_OPTS.find(o => o[0] === m)?.[1]).filter(Boolean).join(' + ') || 'no alerts';
 
+/* ---- recurring ---- */
+const REPEAT_OPTS = [['', 'Does not repeat'], ['day', 'Every day'], ['week', 'Every week'], ['2week', 'Every 2 weeks'], ['month', 'Every month'], ['year', 'Every year']];
+const SHOW_OPTS = [[0, 'Show on the day'], [1, 'Show 1 day before'], [3, 'Show 3 days before'], [-1, 'Always show (until next)']];
+const RRULE = {day:'FREQ=DAILY', week:'FREQ=WEEKLY', '2week':'FREQ=WEEKLY;INTERVAL=2', month:'FREQ=MONTHLY', year:'FREQ=YEARLY'};
+const repeatName = r => REPEAT_OPTS.find(o => o[0] === r)?.[1].toLowerCase() || '';
+function nextDue(ms, every){
+  const d = new Date(ms);
+  if (every === 'day') d.setDate(d.getDate() + 1);
+  else if (every === 'week') d.setDate(d.getDate() + 7);
+  else if (every === '2week') d.setDate(d.getDate() + 14);
+  else if (every === 'month') d.setMonth(d.getMonth() + 1);
+  else if (every === 'year') d.setFullYear(d.getFullYear() + 1);
+  return d.getTime();
+}
+const dayStart = ms => { const d = new Date(ms); d.setHours(0, 0, 0, 0); return d.getTime(); };
+const dayEnd = ms => { const d = new Date(ms); d.setHours(23, 59, 59, 999); return d.getTime(); };
+// a recurring objective is only on the map inside its window
+function isShown(t){
+  if (!t.repeat || !t.due) return true;
+  const show = t.repeat.show ?? 0;
+  return show < 0 || Date.now() >= dayStart(t.due) - show * 864e5;
+}
+// missed occurrence (its day is over) → quietly move on to the next one
+function rollOver(t){
+  if (!t.repeat || !t.due || t.status !== 'active') return false;
+  let moved = false;
+  while (Date.now() > dayEnd(t.due)){ t.due = nextDue(t.due, t.repeat.every); moved = true; }
+  if (moved) resetSteps(t);
+  return moved;
+}
+function resetSteps(t){
+  t.cur = 0;
+  for (const s of t.steps){ delete s.doneAt; delete s.photoId; delete s.note; }
+}
+async function rollAll(){
+  for (const t of tasks) if (rollOver(t)) await saveTask(t);
+}
+
 function timeFields(o){
   const opt = sel => ALERT_OPTS.map(([v, l]) => `<option value="${v}" ${v === sel ? 'selected' : ''}>${l}</option>`).join('');
   const a = o.alerts || DEFAULT_ALERTS;
+  const rep = o.repeat?.every || '', show = o.repeat?.show ?? 0;
   return `
     <label class="toggle"><span><b>Fixed date &amp; time</b></span><input type="checkbox" id="tOn" ${o.due ? 'checked' : ''}></label>
     <div id="tBox" ${o.due ? '' : 'hidden'}>
@@ -375,18 +417,27 @@ function timeFields(o){
       <input class="inp" type="datetime-local" id="tWhen" value="${toLocalInput(o.due || defaultDue())}">
       <label class="f">Calendar alerts</label>
       <div class="row"><select class="inp" id="tA1">${opt(a[0] ?? -1)}</select><select class="inp" id="tA2">${opt(a[1] ?? -1)}</select></div>
+      <label class="f">Repeat</label>
+      <select class="inp" id="tRep">${REPEAT_OPTS.map(([v, l]) => `<option value="${v}" ${v === rep ? 'selected' : ''}>${l}</option>`).join('')}</select>
+      <div id="tShowBox" ${rep ? '' : 'hidden'}>
+        <label class="f">On the map</label>
+        <select class="inp" id="tShow">${SHOW_OPTS.map(([v, l]) => `<option value="${v}" ${v === show ? 'selected' : ''}>${l}</option>`).join('')}</select>
+        <div class="sub" style="margin:6px 0 0">Not done by the end of its day? It disappears and comes back for the next one.</div>
+      </div>
     </div>`;
 }
 // wires the fields up and returns a function that writes them into the object
 function bindTime(b, o){
-  const on = b.querySelector('#tOn'), box = b.querySelector('#tBox');
+  const on = b.querySelector('#tOn'), box = b.querySelector('#tBox'), rep = b.querySelector('#tRep');
   on.onchange = () => box.hidden = !on.checked;
+  rep.onchange = () => b.querySelector('#tShowBox').hidden = !rep.value;
   return () => {
     const ms = new Date(b.querySelector('#tWhen').value).getTime();
     if (on.checked && ms){
       o.due = ms;
       o.alerts = [...new Set([+b.querySelector('#tA1').value, +b.querySelector('#tA2').value])].filter(v => v >= 0).sort((x, y) => x - y);
-    } else { delete o.due; delete o.alerts; }
+      if (rep.value) o.repeat = {every:rep.value, show:+b.querySelector('#tShow').value}; else delete o.repeat;
+    } else { delete o.due; delete o.alerts; delete o.repeat; }
   };
 }
 
@@ -398,6 +449,7 @@ function icsFor(t){
   return ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//ZH Story//EN', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', 'BEGIN:VEVENT',
     `UID:${t.id}@zh-story`, `DTSTAMP:${f(Date.now())}`, `DTSTART:${f(t.due)}`, `DTEND:${f(t.due + 36e5)}`,
     `SUMMARY:${e(t.title)}`, `LOCATION:${e(s.place)}`, `DESCRIPTION:${e([CATS[t.cat].name, t.desc].filter(Boolean).join(' – '))}`,
+    ...(t.repeat ? [`RRULE:${RRULE[t.repeat.every]}`] : []),
     ...alarms, 'END:VEVENT', 'END:VCALENDAR'].join('\r\n');
 }
 function addToCalendar(t){
@@ -411,7 +463,7 @@ function offerCalendar(t, back){
   openSheet(`
     <div class="kicker" style="--c:${CATS[t.cat].color}">Reminder</div>
     <div class="h">Add to iPhone calendar?</div>
-    <div class="sub">${esc(t.title)}<br>⏰ ${dueLabel(t.due)} · ${alertText(t)}</div>
+    <div class="sub">${esc(t.title)}<br>⏰ ${dueLabel(t.due)} · ${alertText(t)}${t.repeat ? `<br>🔁 ${repeatName(t.repeat.every)} – one repeating calendar event` : ''}</div>
     <button class="btn primary block" id="calGo">📅 Add to calendar</button>
     <button class="btn ghost block" id="calNo">${back ? 'Back' : 'Not now'}</button>`,
   b => {
@@ -637,7 +689,7 @@ function openMission(id){
       </div>`).join('') + `</div>` : '';
   openSheet(`
     <div class="mission-head">${blip(t.cat, 'big')}<div><div class="kicker" style="--c:${c.color}">${c.name}${multi ? ` · Step ${t.cur + 1} of ${t.steps.length}` : ''}</div><div class="h">${esc(t.title)}</div></div></div>
-    <div class="meta">${t.due ? `<span class="chip due-${dueState(t)}">⏰ ${dueLabel(t.due)}</span>` : ''}<span class="chip">Started ${fmtDate(t.created)}</span>${meLatLng ? `<span class="chip">${distTo(s)} away</span>` : ''}</div>
+    <div class="meta">${t.due ? `<span class="chip due-${dueState(t)}">⏰ ${dueLabel(t.due)}</span>` : ''}${t.repeat ? `<span class="chip">🔁 ${repeatName(t.repeat.every)}</span>` : ''}<span class="chip">Started ${fmtDate(t.created)}</span>${meLatLng ? `<span class="chip">${distTo(s)} away</span>` : ''}</div>
     ${t.desc ? `<div class="desc">${esc(t.desc)}</div>` : ''}
     <div class="objective" style="--c:${c.color}">
       <div class="kicker">Current step</div>
@@ -688,7 +740,7 @@ function sheetEdit(t){
     <button class="btn primary block" id="xSave">Save</button>
     <button class="btn ghost block" id="xBack">Back</button>`,
   b => {
-    const readTime = bindTime(b, t), oldDue = t.due, oldAlerts = String(t.alerts);
+    const readTime = bindTime(b, t), oldDue = t.due, oldAlerts = String(t.alerts) + JSON.stringify(t.repeat || '');
     const commit = async () => {
       readTime();
       t.title = b.querySelector('#xTitle').value.trim() || t.title;
@@ -700,7 +752,8 @@ function sheetEdit(t){
     b.querySelector('#xSave').onclick = async () => {
       await commit(); render();
       // time changed → offer to put the new time in the calendar
-      if (t.due && (t.due !== oldDue || String(t.alerts) !== oldAlerts)) offerCalendar(t, () => openMission(t.id));
+      if (t.due && (t.due !== oldDue || String(t.alerts) + JSON.stringify(t.repeat || '') !== oldAlerts)) offerCalendar(t, () => openMission(t.id));
+      else if (!isShown(t)){ closeSheet(); toast(`Hidden until ${dueLabel(t.due).split(' · ')[0]}`); return; }
       else openMission(t.id);
     };
     b.querySelector('#xBack').onclick = () => openMission(t.id);
@@ -788,7 +841,19 @@ async function completeStep(t, note, photo){
   if (photo){ s.photoId = uid(); await DB.put('photos', photo, s.photoId); }
   t.cur++;
   const c = CATS[t.cat];
-  if (t.cur >= t.steps.length){
+  if (t.cur >= t.steps.length && t.repeat){
+    // recurring: archive this occurrence as its own entry, then jump to the next date
+    const copy = JSON.parse(JSON.stringify(t));
+    Object.assign(copy, {id:uid(), status:'done', doneAt:s.doneAt, repeatOf:t.id, occurrence:t.due, created:Math.min(dayStart(t.due), s.doneAt)});
+    delete copy.repeat;
+    tasks.push(copy); await saveTask(copy);
+    do { t.due = nextDue(t.due, t.repeat.every); } while (t.due <= Date.now() && dayEnd(t.due) < Date.now());
+    if (dayEnd(t.due) === dayEnd(copy.occurrence)) t.due = nextDue(t.due, t.repeat.every); // never the same day twice
+    resetSteps(t);
+    await saveTask(t);
+    selectedId = null; closeSheet(); render();
+    banner(c.name, 'Objective Passed', `${t.title} · next ${dueLabel(t.due).split(' · ')[0]}`, c.color);
+  } else if (t.cur >= t.steps.length){
     t.status = 'done'; t.doneAt = s.doneAt;
     await saveTask(t);
     selectedId = null; closeSheet(); render();
@@ -996,11 +1061,15 @@ tick(); setInterval(tick, 10000);
   } catch (e) { toast('Storage unavailable — data won\'t be saved'); if (!places.length) places = [{...HQ_DEFAULT}]; }
   map.setView([hq().lat, hq().lng], START_ZOOM);
   if (mode !== 'all' && !CATS[mode]) mode = 'all';
+  await rollAll();
   render();
   const over = active().filter(t => dueState(t) === 'over').length;
   const today = active().filter(t => t.due && t.due >= Date.now() && new Date(t.due).toDateString() === new Date().toDateString()).length;
   if (over || today) setTimeout(() => toast([over && `${over} overdue`, today && `${today} due today`].filter(Boolean).join(' · ')), 800);
   // refresh countdowns / clock colours every minute
-  setInterval(() => { if (active().some(t => t.due) && !pickCb && !sheet.classList.contains('open')) render(); }, 60000);
+  setInterval(async () => {
+    await rollAll();
+    if (tasks.some(t => t.status === 'active' && t.due) && !pickCb && !sheet.classList.contains('open')) render();
+  }, 60000);
 })();
 if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js');
