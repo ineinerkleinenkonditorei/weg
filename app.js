@@ -336,6 +336,7 @@ function openSheet(html, mount, onClose){
 function closeSheet(){
   sheet.classList.remove('open');
   scrim.hidden = true;
+  planReturn = false;
   const cb = onSheetClose; onSheetClose = null;
   cb && cb();
   if (selectedId){ selectedId = null; render(); }
@@ -837,7 +838,7 @@ function sheetComplete(t){
         prev.style.borderStyle = 'solid'; prev.textContent = '';
       } catch { prev.textContent = 'Could not read photo — try again'; }
     };
-    b.querySelector('#cBack').onclick = () => openMission(t.id);
+    b.querySelector('#cBack').onclick = () => { if (planReturn){ planReturn = false; sheetPlan(); } else openMission(t.id); };
     b.querySelector('#cSave').onclick = async e => {
       e.target.disabled = true;
       await completeStep(t, b.querySelector('#cNote').value.trim(), pendingPhoto);
@@ -861,6 +862,15 @@ function resizeImage(file, max){
   });
 }
 async function completeStep(t, note, photo){
+  const fromPlan = planReturn; planReturn = false;
+  await completeStepInner(t, note, photo);
+  if (fromPlan){
+    // whole objective passed (or this occurrence of a repeating one) → check it off in the plan
+    if (t.status === 'done' || t.cur === 0){ const q = getPlan(); if (!q.done.includes(t.id)) q.done.push(t.id); setPlan(q); }
+    setTimeout(sheetPlan, 350);
+  }
+}
+async function completeStepInner(t, note, photo){
   const s = t.steps[t.cur];
   s.doneAt = Date.now();
   if (note) s.note = note;
@@ -906,6 +916,94 @@ $('#btnList').onclick = () => {
       </button>`; }).join('') : '<div class="empty">No active objectives. Tap + to add one.</div>'}`,
   b => b.querySelectorAll('.list-item').forEach(el => el.onclick = () => openMission(el.dataset.id)));
 };
+
+/* ---------------- Day plan ----------------
+   Free text + up to 10 picked objectives. Stored per phone in localStorage ('plan'),
+   so it never touches the objectives database or the cloud sync. */
+const PLAN_MAX = 10;
+let planReturn = false;   // true while a completion was started from the plan
+function getPlan(){ const p = store.get('plan', {}); return {text:p.text || '', ids:p.ids || [], done:p.done || []}; }
+function setPlan(p){ store.set('plan', p); }
+function sheetPlan(){
+  const p = getPlan();
+  // drop objectives that were deleted meanwhile
+  p.ids = p.ids.filter(id => tasks.some(t => t.id === id));
+  p.done = p.done.filter(id => p.ids.includes(id));
+  setPlan(p);
+  const rows = p.ids.map(id => {
+    const t = tasks.find(x => x.id === id), done = p.done.includes(id) || t.status === 'done';
+    return `<button class="plan-row${done ? ' done' : ''}" data-id="${id}"><span class="plan-sp"></span><span class="plan-t">${esc(t.title)}</span><span class="plan-box">${done ? '✓' : ''}</span></button>`;
+  }).join('');
+  openSheet(`
+    <div class="h grad">Day plan</div>
+    <div class="sub">${new Date().toLocaleDateString('en-GB', {weekday:'long', day:'numeric', month:'long'})}</div>
+    <textarea class="inp plan-text" id="plText" maxlength="400" rows="9" placeholder="...">${esc(p.text)}</textarea>
+    <div class="plan-count" id="plCount">${p.text.length}/400</div>
+    <button class="btn block" id="plPick">Select objectives</button>
+    ${rows ? `<div class="plan-list">${rows}</div><button class="btn ghost block" id="plClear">Clear list</button>` : ''}`,
+  b => {
+    const ta = b.querySelector('#plText');
+    ta.oninput = () => { const q = getPlan(); q.text = ta.value; setPlan(q); b.querySelector('#plCount').textContent = `${ta.value.length}/400`; };
+    b.querySelector('#plPick').onclick = sheetPlanPick;
+    const cl = b.querySelector('#plClear');
+    if (cl) cl.onclick = () => { if (!confirm('Clear the list? (Objectives stay on the map.)')) return; const q = getPlan(); q.ids = []; q.done = []; setPlan(q); sheetPlan(); };
+    b.querySelectorAll('.plan-row').forEach(el => el.onclick = () => {
+      if (el.classList.contains('done')) return;
+      const t = tasks.find(x => x.id === el.dataset.id); if (!t) return;
+      planReturn = true; sheetComplete(t);
+    });
+  });
+}
+function sheetPlanPick(){
+  const p = getPlan();
+  const list = active().filter(t => !p.done.includes(t.id)).sort((a, b) => (a.due || Infinity) - (b.due || Infinity) || a.created - b.created);
+  const sel = new Set(p.ids.filter(id => list.some(t => t.id === id)));
+  const keep = p.ids.filter(id => !sel.has(id)); // already checked off → they stay on the list
+  const room = () => PLAN_MAX - keep.length - sel.size;
+  const cats = Object.keys(CATS).filter(k => list.some(t => t.cat === k));
+  let filt = 'all';
+  openSheet(`
+    <div class="h grad">Select objectives</div>
+    <div class="sub" id="ppSub"></div>
+    <div class="pp-filter">
+      <button class="pp-cat on" data-k="all"><span class="pp-all"></span></button>
+      ${cats.map(k => `<button class="pp-cat" data-k="${k}">${blip(k)}</button>`).join('')}
+    </div>
+    <div class="pp-list" id="ppList"></div>
+    <button class="btn primary block" id="ppOk">Done</button>`,
+  b => {
+    const sub = () => b.querySelector('#ppSub').textContent = `${keep.length + sel.size} of ${PLAN_MAX} selected`;
+    const draw = () => {
+      const shown = list.filter(t => filt === 'all' || t.cat === filt);
+      b.querySelector('#ppList').innerHTML = shown.length ? shown.map(t => `
+        <button class="pick-row${sel.has(t.id) ? ' on' : ''}" data-id="${t.id}"><span class="pp-t">${esc(t.title)}</span><span class="plan-box">${sel.has(t.id) ? '✓' : ''}</span></button>`).join('')
+        : '<div class="empty">No active objectives.</div>';
+      b.querySelectorAll('.pick-row').forEach(el => el.onclick = () => {
+        const id = el.dataset.id;
+        if (sel.has(id)) sel.delete(id);
+        else if (room() > 0) sel.add(id);
+        else { toast(`Up to ${PLAN_MAX} objectives`); return; }
+        el.classList.toggle('on', sel.has(id));
+        el.querySelector('.plan-box').textContent = sel.has(id) ? '✓' : '';
+        sub();
+      });
+    };
+    sub(); draw();
+    b.querySelectorAll('.pp-cat').forEach(el => el.onclick = () => {
+      filt = el.dataset.k;
+      b.querySelectorAll('.pp-cat').forEach(x => x.classList.toggle('on', x === el));
+      draw();
+    });
+    b.querySelector('#ppOk').onclick = () => {
+      const q = getPlan();
+      // keep the existing order, add new ones at the end
+      q.ids = [...keep, ...q.ids.filter(id => sel.has(id)), ...[...sel].filter(id => !q.ids.includes(id))];
+      q.ids = [...new Set(q.ids)];
+      setPlan(q); sheetPlan();
+    };
+  });
+}
+$('#btnPlan').onclick = sheetPlan;
 
 /* ---------------- Archive ---------------- */
 $('#btnArchive').onclick = () => { $('#archive').hidden = false; renderArchive(); };
