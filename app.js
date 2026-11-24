@@ -165,12 +165,15 @@ const LAYERS = {
 };
 let layerKey = store.get('layer', 'atlas');
 let showLabels = store.get('labels', true);
+// lite mode (per phone): no glow layers, no blur vignette, no corner effects — for older iPhones
+let liteMode = store.get('lite', false);
+document.body.classList.toggle('lite', liteMode);
 function applyLayer(){
   for (const k in LAYERS) for (const p of ['base', 'glow', 'glowWide', 'labels']) LAYERS[k][p] && map.removeLayer(LAYERS[k][p]);
   if (!LAYERS[layerKey]) layerKey = 'atlas';
   const L_ = LAYERS[layerKey];
-  if (L_.glowWide) L_.glowWide.addTo(map);
-  if (L_.glow) L_.glow.addTo(map);
+  if (L_.glowWide && !liteMode) L_.glowWide.addTo(map);
+  if (L_.glow && !liteMode) L_.glow.addTo(map);
   L_.base.addTo(map);
   if (showLabels && L_.labels) L_.labels.addTo(map);
   document.body.dataset.layer = layerKey;
@@ -1399,7 +1402,8 @@ $('#btnMenu').onclick = () => {
     <button class="list-item" id="oCloud"><span class="t"><b>☁ Cloud sync</b><small id="bkStatus">${Backup.label()}</small></span></button>
     <div class="sub" style="margin:10px 0 4px">Backup file (manual)</div>
     <div class="row"><button class="btn" id="oExport">Export</button><button class="btn" id="oImport">Import</button></div>
-    <div class="sub" style="margin-top:18px">${active().length} active · ${done().length} passed</div>`,
+    <div class="sub" style="margin-top:18px">${active().length} active · ${done().length} passed</div>
+    <button class="lite-link" id="oLite">lite mode: ${liteMode ? 'on' : 'off'}</button>`,
   b => {
     b.querySelectorAll('[data-l]').forEach(x => x.onclick = () => { layerKey = x.dataset.l; store.set('layer', layerKey); applyLayer(); $('#btnMenu').click(); });
     b.querySelector('#oLabels').onchange = e => { showLabels = e.target.checked; store.set('labels', showLabels); applyLayer(); };
@@ -1408,6 +1412,11 @@ $('#btnMenu').onclick = () => {
     b.querySelector('#oCloud').onclick = sheetBackup;
     b.querySelector('#oExport').onclick = exportData;
     b.querySelector('#oImport').onclick = () => { $('#importInput').value = ''; $('#importInput').click(); };
+    b.querySelector('#oLite').onclick = e => {
+      liteMode = !liteMode; store.set('lite', liteMode);
+      document.body.classList.toggle('lite', liteMode); applyLayer();
+      e.target.textContent = `lite mode: ${liteMode ? 'on' : 'off'}`;
+    };
   });
 };
 function sheetPlace(existing){

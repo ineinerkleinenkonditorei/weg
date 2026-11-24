@@ -377,6 +377,11 @@ body.zooming #vignette{-webkit-backdrop-filter:none;backdrop-filter:none}
 #map[data-z="11"] .glow-wide,#map[data-z="10"] .glow-wide,#map[data-z="9"] .glow-wide{display:none}
 #map[data-z="11"] .glow-tiles,#map[data-z="10"] .glow-tiles,#map[data-z="9"] .glow-tiles{filter:grayscale(1) brightness(1.45) contrast(6) blur(2px) brightness(1.1)}
 
+/* ---------- lite mode (older phones): drop the expensive effects ---------- */
+body.lite #fx,body.lite #vignette,body.lite #flash{display:none!important}
+body.lite *{-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
+.lite-link{display:block;margin:6px 0 0;padding:4px 0;font-size:11px;color:var(--muted);background:none;border:0;text-align:left}
+
 /* ---------- day plan ---------- */
 .plan-text{min-height:190px;line-height:1.4}
 .plan-count{text-align:right;color:var(--muted);font-size:11px;margin:4px 0 2px}
